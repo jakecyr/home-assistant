@@ -17,44 +17,27 @@ import {
   AUDIO_DEVICE,
   TTS_VOICE,
   SERPAPI_KEY,
+  DEBUG_MODE,
+  CONFIG_PATH,
+  LOG_FILE,
 } from "./env";
 import { loadConfig } from "./config";
 
 let registryPromise = loadTools(); // lazy-load once
 
-const cliArgs = process.argv.slice(2);
-let configPathArg: string | undefined;
-let logFileArg: string | undefined;
-
-for (let i = 0; i < cliArgs.length; i++) {
-  const arg = cliArgs[i];
-  switch (arg) {
-    case "--config":
-      if (cliArgs[i + 1]) {
-        configPathArg = cliArgs[++i];
-      }
-      break;
-    case "--log-file":
-      if (cliArgs[i + 1]) {
-        logFileArg = cliArgs[++i];
-      }
-      break;
-    default:
-      break;
-  }
-}
-
-const { config: appConfig, path: loadedConfigPath } = loadConfig(configPathArg);
+const { config: appConfig, path: loadedConfigPath } = loadConfig(CONFIG_PATH);
 if (loadedConfigPath) {
-    console.log(`Loaded config from ${loadedConfigPath}`);
-} else if (configPathArg) {
-    console.warn(`Config file ${configPathArg} not found; proceeding with defaults.`);
+  console.log(`Loaded config from ${loadedConfigPath}`);
+} else if (CONFIG_PATH) {
+  console.warn(
+    `Config file ${CONFIG_PATH} not found; proceeding with defaults.`
+  );
 }
 
 let logStream: ReturnType<typeof createWriteStream> | null = null;
-if (logFileArg) {
+if (LOG_FILE) {
   try {
-    const resolvedLog = path.resolve(logFileArg);
+    const resolvedLog = path.resolve(LOG_FILE);
     const logDir = path.dirname(resolvedLog);
     if (!existsSync(logDir)) {
       mkdirSync(logDir, { recursive: true });
@@ -70,7 +53,8 @@ if (logFileArg) {
       error: console.error.bind(console),
     };
 
-    const mirror = (level: keyof typeof original) =>
+    const mirror =
+      (level: keyof typeof original) =>
       (...args: any[]) => {
         original[level](...args);
         try {
@@ -89,7 +73,9 @@ if (logFileArg) {
                     })()
               )
               .join(" ");
-            logStream.write(`[${timestamp}] ${level.toUpperCase()} ${message}\n`);
+            logStream.write(
+              `[${timestamp}] ${level.toUpperCase()} ${message}\n`
+            );
           }
         } catch {
           // ignore logging failures
@@ -103,12 +89,14 @@ if (logFileArg) {
 
     process.on("exit", () => {
       if (logStream) {
-        logStream.write(`[${new Date().toISOString()}] --- Jarvis session ended ---\n`);
+        logStream.write(
+          `[${new Date().toISOString()}] --- Jarvis session ended ---\n`
+        );
         logStream.end();
       }
     });
   } catch (err) {
-    console.error(`Failed to set up log file at ${logFileArg}:`, err);
+    console.error(`Failed to set up log file at ${LOG_FILE}:`, err);
     logStream = null;
   }
 }
@@ -147,10 +135,17 @@ function buildDeviceContextSummary(): string | null {
   if (!sections.length) return null;
 
   sections.push(
-    "If the user refers to a light or plug, pick the matching device name above when calling a tool."
+    "If the user refers to a light or plug, select the matching device name above when calling a tool. If a requested device name is missing, inform the user rather than pretending success."
   );
 
   return sections.join("\n");
+}
+
+function getAllDeviceNames(): string[] {
+  return [
+    ...Object.keys(appConfig.tplink?.devices ?? {}),
+    ...Object.keys(appConfig.wiz?.devices ?? {}),
+  ];
 }
 
 async function thinkAndAct(transcript: string): Promise<string> {
@@ -164,21 +159,35 @@ async function thinkAndAct(transcript: string): Promise<string> {
     },
   };
 
-  const { finalText, turns } = await runAgentWithTools(
-    transcript,
-    registry,
-    ctx,
-    {
+  const { finalText, turns, toolUsed, lastToolMessage } =
+    await runAgentWithTools(transcript, registry, ctx, {
       maxTurns: 6,
       history: conversationHistory,
       extraSystemContext: buildDeviceContextSummary() ?? undefined,
+      debugTools: DEBUG_MODE,
+    });
+  let responseText = finalText;
+
+  const deviceMentioned = transcript.match(/\b(light|lamp|plug|socket|switch)\b/i);
+  if (!toolUsed && deviceMentioned) {
+    const names = getAllDeviceNames();
+    if (names.length) {
+      responseText = `I didn't find a configured device matching that request. Try one of: ${names.join(", ")}.`;
+    } else {
+      responseText =
+        "I don't have any smart devices configured yet. Update config.json with your TP-Link or WiZ devices.";
     }
-  );
-  console.log(`🤖 (${turns} turn${turns === 1 ? "" : "s"}) ${finalText}`);
+    console.warn(
+      "No tool was executed for a device-related request. Last tool message:",
+      lastToolMessage
+    );
+  }
+
+  console.log(`🤖 (${turns} turn${turns === 1 ? "" : "s"}) ${responseText}`);
   pushHistory("user", transcript);
-  if (finalText.trim()) pushHistory("assistant", finalText.trim());
-  await speak(finalText);
-  return finalText;
+  if (responseText.trim()) pushHistory("assistant", responseText.trim());
+  await speak(responseText);
+  return responseText;
 }
 
 if (!PICOVOICE_ACCESS_KEY || !ASSEMBLYAI_API_KEY || !OPENAI_API_KEY) {
@@ -229,7 +238,13 @@ const PLAYER_CANDIDATES: AudioPlayer[] =
         { command: "afplay", makeArgs: (file) => [file] },
         {
           command: "ffplay",
-          makeArgs: (file) => ["-autoexit", "-nodisp", "-loglevel", "error", file],
+          makeArgs: (file) => [
+            "-autoexit",
+            "-nodisp",
+            "-loglevel",
+            "error",
+            file,
+          ],
         },
       ]
     : [
@@ -237,7 +252,13 @@ const PLAYER_CANDIDATES: AudioPlayer[] =
         { command: "paplay", makeArgs: (file) => [file] },
         {
           command: "ffplay",
-          makeArgs: (file) => ["-autoexit", "-nodisp", "-loglevel", "error", file],
+          makeArgs: (file) => [
+            "-autoexit",
+            "-nodisp",
+            "-loglevel",
+            "error",
+            file,
+          ],
         },
         { command: "play", makeArgs: (file) => [file] },
       ];
@@ -275,7 +296,8 @@ async function generateSpeechFile(text: string): Promise<string | null> {
     voice: TTS_VOICE,
     input: trimmed,
     response_format: "wav",
-    instructions: "Speak in a friendly, helpful tone and mention that you are an AI assistant when relevant.",
+    instructions:
+      "Speak in a friendly, helpful tone and mention that you are an AI assistant when relevant.",
   });
 
   const buffer = Buffer.from(await speech.arrayBuffer());
@@ -297,7 +319,9 @@ async function playAudioFile(filePath: string, player: AudioPlayer) {
       } else {
         reject(
           new Error(
-            `Audio player exited with code ${code}${signal ? ` (signal ${signal})` : ""}`
+            `Audio player exited with code ${code}${
+              signal ? ` (signal ${signal})` : ""
+            }`
           )
         );
       }
@@ -350,7 +374,10 @@ function createEarconBuffer(
   buffer.writeUInt32LE(dataSize, 40);
 
   const amplitude = Math.max(0, Math.min(1, volume)) * 0.8 * 0x7fff;
-  const fadeSamples = Math.min(sampleCount / 4, Math.round((sampleRate * 10) / 1000));
+  const fadeSamples = Math.min(
+    sampleCount / 4,
+    Math.round((sampleRate * 10) / 1000)
+  );
 
   for (let i = 0; i < sampleCount; i++) {
     const t = i / sampleRate;
@@ -418,7 +445,9 @@ function resolveAudioDeviceIndex(): number {
       name.toLowerCase().includes(label.toLowerCase())
     );
     if (idx >= 0) {
-      console.log(`🎛️  Audio device matched "${label}": [${idx}] ${devices[idx]}`);
+      console.log(
+        `🎛️  Audio device matched "${label}": [${idx}] ${devices[idx]}`
+      );
       return idx;
     }
     console.warn(
@@ -428,7 +457,9 @@ function resolveAudioDeviceIndex(): number {
     );
   } catch (err) {
     console.warn(
-      `Could not enumerate audio devices (${(err as Error).message}). Falling back to default.`
+      `Could not enumerate audio devices (${
+        (err as Error).message
+      }). Falling back to default.`
     );
   }
 
@@ -532,23 +563,23 @@ async function startAAI(): Promise<string> {
       finalize().finally(() => {
         if (finalTranscript !== null || latestTranscript) {
           const best =
-            (finalTranscript && finalTranscript.length)
+            finalTranscript && finalTranscript.length
               ? finalTranscript
               : formattedTranscript.length >= latestTranscript.length
               ? formattedTranscript
               : latestTranscript;
           resolve((best || "").trim());
         } else {
-          reject(new Error(`AAI closed without final transcript (${code} ${reason})`));
+          reject(
+            new Error(`AAI closed without final transcript (${code} ${reason})`)
+          );
         }
       });
     });
 
-    sessionTranscriber
-      .connect()
-      .catch((err) => {
-        finalize().finally(() => reject(err));
-      });
+    sessionTranscriber.connect().catch((err) => {
+      finalize().finally(() => reject(err));
+    });
   });
 }
 
@@ -564,14 +595,19 @@ function resetToIdle() {
     transcriber = null;
     current
       .close(false)
-      .catch((err) => console.warn("Failed to close transcriber during reset:", err));
+      .catch((err) =>
+        console.warn("Failed to close transcriber during reset:", err)
+      );
   }
 }
 
 function sendFrameToTranscriber(frame: Buffer) {
   if (!transcriber) return;
   try {
-    const payload = frame.buffer.slice(frame.byteOffset, frame.byteOffset + frame.byteLength);
+    const payload = frame.buffer.slice(
+      frame.byteOffset,
+      frame.byteOffset + frame.byteLength
+    );
     transcriber.sendAudio(payload);
   } catch (err) {
     console.error("Failed to stream audio frame:", err);
@@ -619,7 +655,9 @@ async function captureUserUtterance(): Promise<string | null> {
         listeningEarconActive = false;
       }
       if (attempt === 0) {
-        console.log("No transcript captured; continuing to listen without the wake word.");
+        console.log(
+          "No transcript captured; continuing to listen without the wake word."
+        );
         continue;
       }
 
@@ -745,9 +783,9 @@ function start() {
     } catch {}
     try {
       if (transcriber) {
-        transcriber.close(false).catch((err) =>
-          console.error("Failed to close transcriber:", err)
-        );
+        transcriber
+          .close(false)
+          .catch((err) => console.error("Failed to close transcriber:", err));
       }
     } catch {}
     try {

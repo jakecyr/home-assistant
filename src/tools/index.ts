@@ -8,8 +8,6 @@ export type ToolRegistry = {
 };
 
 const tools: Tool[] = [
-  require("./lights.off").default,
-  require("./lights.on").default,
   require("./tplink.toggle").default,
   require("./wiz.toggle").default,
   require("./weather").default,
@@ -20,6 +18,16 @@ const tools: Tool[] = [
 export async function loadTools(): Promise<ToolRegistry> {
   const map = new Map<string, Tool>();
   for (const t of tools) map.set(t.name, t);
+
+  if (process.env.DEBUG_TOOLS === "true") {
+    console.log("[tools] Registered tools:");
+    for (const tool of tools) {
+      console.log(`  - ${tool.name}: ${tool.description}`);
+      try {
+        console.log(`    parameters: ${JSON.stringify(tool.parameters)}`);
+      } catch {}
+    }
+  }
 
   return {
     specs: tools.map(toOpenAIToolSpec),
