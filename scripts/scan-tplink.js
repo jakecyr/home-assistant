@@ -3,6 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const { Client } = require("tplink-smarthome-api");
+const dgram = require("dgram");
 
 const DEFAULT_CONFIG = "config.json";
 
@@ -98,6 +99,87 @@ async function scanTpLink(timeoutMs = 7000) {
   });
 }
 
+function encrypt(buffer, key = 0xab) {
+  const out = Buffer.allocUnsafe(buffer.length);
+  for (let i = 0; i < buffer.length; i++) {
+    const c = buffer[i];
+    out[i] = c ^ key;
+    key = out[i];
+  }
+  return out;
+}
+
+function decrypt(buffer, key = 0xab) {
+  const out = Buffer.allocUnsafe(buffer.length);
+  for (let i = 0; i < buffer.length; i++) {
+    const c = buffer[i];
+    out[i] = c ^ key;
+    key = c;
+  }
+  return out;
+}
+
+async function legacyScan(timeoutMs = 5000) {
+  const socket = dgram.createSocket({ type: "udp4", reuseAddr: true });
+  const devices = new Map();
+
+  return new Promise((resolve) => {
+    socket.on("message", (msg, rinfo) => {
+      try {
+        const decrypted = decrypt(msg);
+        const payload = JSON.parse(decrypted.toString("utf8"));
+        const sysinfo = payload?.system?.get_sysinfo;
+        if (!sysinfo) return;
+        const alias =
+          sysinfo.alias ||
+          sysinfo.dev_name ||
+          sysinfo.model ||
+          sysinfo.deviceId ||
+          rinfo.address;
+        devices.set(rinfo.address, {
+          host: rinfo.address,
+          alias,
+          deviceId: sysinfo.deviceId,
+          model: sysinfo.model || sysinfo.type || sysinfo.mic_type,
+        });
+      } catch (err) {
+        // ignore malformed packets
+      }
+    });
+
+    socket.bind(9998, undefined, () => {
+      socket.setBroadcast(true);
+      const message = encrypt(Buffer.from('{"system":{"get_sysinfo":{}}}', "utf8"));
+      socket.send(message, 0, message.length, 9999, "255.255.255.255");
+    });
+
+    setTimeout(() => {
+      try {
+        socket.close();
+      } catch {}
+      resolve(Array.from(devices.values()));
+    }, timeoutMs);
+  });
+}
+
+async function discoverDevices() {
+  const combined = new Map();
+
+  const primary = await scanTpLink();
+  for (const device of primary) {
+    combined.set(device.host, device);
+  }
+
+  if (primary.length === 0) {
+    const fallback = await legacyScan();
+    for (const device of fallback) {
+      if (!combined.has(device.host)) combined.set(device.host, device);
+    }
+  }
+
+  return Array.from(combined.values());
+}
+
 function mergeDevices(config, entries, force) {
   if (!entries.length) return { updated: false, added: [] };
   const section = config.tplink || (config.tplink = {});
@@ -127,7 +209,7 @@ async function main() {
   }
 
   console.log("Scanning local network for TP-Link Kasa devices…");
-  const results = await scanTpLink();
+  const results = await discoverDevices();
 
   if (!results.length) {
     console.log("No TP-Link devices discovered.");
