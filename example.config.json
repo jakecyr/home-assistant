@@ -2,7 +2,11 @@
   "tools": ["tplink_toggle", "time_now"],
   "tplink": {
     "devices": {
-      "tall_lamp": "192.168.0.163"
+      "tall_lamp": {
+        "ip": "192.168.0.163",
+        "room": "living room",
+        "aliases": ["floor lamp", "tall lamp"]
+      }
     }
   },
   "wiz": {

@@ -4,6 +4,8 @@ import path from "path";
 import { spawn, spawnSync } from "child_process";
 import { randomUUID } from "crypto";
 import { loadTools } from "./tools";
+import type { ToolRegistry } from "./tools";
+import type { ToolContext } from "./tools/_types";
 import { runAgentWithTools } from "./agent/loop";
 import { openai } from "./agent/openai";
 import type { ChatCompletionMessageParam } from "openai/resources";
@@ -25,7 +27,9 @@ import {
 import { loadConfig } from "./config";
 import {
   buildDeviceContextSummary,
+  buildDeviceDescriptors,
   getAllDeviceNames,
+  inferActionFromText,
   shouldContinueConversation,
 } from "./deviceContext";
 
@@ -130,13 +134,23 @@ function pushHistory(role: "user" | "assistant", content: string) {
 async function thinkAndAct(transcript: string): Promise<string> {
   const registry = await registryPromise;
 
-  const ctx = {
+  const ctx: ToolContext = {
     log: (...a: any[]) => console.log("[tool]", ...a),
     config: appConfig,
     env: {
       serpApiKey: SERPAPI_KEY,
     },
   };
+
+  const direct = await maybeHandleDeviceControl(transcript, registry, ctx);
+  if (direct) {
+    const { message } = direct;
+    console.log(`🤖 (direct) ${message}`);
+    pushHistory("user", transcript);
+    if (message.trim()) pushHistory("assistant", message.trim());
+    await speak(message);
+    return message;
+  }
 
   const { finalText, turns, toolUsed, lastToolMessage } =
     await runAgentWithTools(transcript, registry, ctx, {
@@ -686,6 +700,87 @@ async function handleConversationLoop() {
       return;
     }
   }
+}
+
+function formatDeviceName(name: string): string {
+  return name
+    .split(/[_-]/g)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+async function maybeHandleDeviceControl(
+  transcript: string,
+  registry: ToolRegistry,
+  ctx: ToolContext
+): Promise<{ message: string; toolUsed: boolean } | null> {
+  const descriptors = buildDeviceDescriptors(appConfig, ENABLED_TOOLS);
+  if (!descriptors.length) return null;
+
+  const lower = transcript.toLowerCase();
+  const matches = new Map<string, (typeof descriptors)[number]>();
+
+  for (const descriptor of descriptors) {
+    for (const alias of descriptor.aliases) {
+      if (alias && lower.includes(alias)) {
+        matches.set(descriptor.name, descriptor);
+        break;
+      }
+    }
+  }
+
+  if (!matches.size) return null;
+
+  const matched = Array.from(matches.values());
+  const action = inferActionFromText(transcript);
+
+  if (!action) {
+    const names = matched.map((d) => formatDeviceName(d.name));
+    const list = names.join(" and ");
+    const question =
+      names.length > 1
+        ? `Do you want me to turn the devices ${list} on or off?`
+        : `Do you want me to turn ${list} on or off?`;
+    return { message: question, toolUsed: false };
+  }
+
+  const responses: string[] = [];
+  let anySuccess = false;
+
+  for (const descriptor of matched) {
+    if (!registry.names.includes(descriptor.tool)) {
+      responses.push(
+        `${formatDeviceName(descriptor.name)} can't be controlled because ${descriptor.tool} is disabled.`
+      );
+      continue;
+    }
+
+    const result = await registry.exec(
+      descriptor.tool,
+      { device: descriptor.name, action },
+      ctx
+    );
+
+    if (result.ok) {
+      anySuccess = true;
+      responses.push(
+        result.message ||
+          `${formatDeviceName(descriptor.name)} turned ${action === "toggle" ? "on/off" : action}.`
+      );
+    } else {
+      responses.push(
+        result.message ||
+          `Failed to control ${formatDeviceName(descriptor.name)}.`
+      );
+    }
+  }
+
+  if (!responses.length) return null;
+
+  return {
+    message: responses.join(" ").trim(),
+    toolUsed: anySuccess,
+  };
 }
 
 function processAudioChunk(chunk: Buffer) {

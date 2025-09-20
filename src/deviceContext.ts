@@ -1,4 +1,4 @@
-import type { AppConfig } from "./config";
+import type { AppConfig, DeviceEntry } from "./config";
 
 export function buildDeviceContextSummary(
   config: AppConfig,
@@ -49,6 +49,95 @@ export function getAllDeviceNames(
   return names;
 }
 
+export interface DeviceDescriptor {
+  name: string;
+  ip: string;
+  room?: string;
+  tool: "tplink_toggle" | "wiz_toggle";
+  aliases: string[];
+}
+
+export function buildDeviceDescriptors(
+  config: AppConfig,
+  enabledTools: string[] = []
+): DeviceDescriptor[] {
+  const out: DeviceDescriptor[] = [];
+  const enabled = new Set(enabledTools);
+
+  if (enabled.has("tplink_toggle")) {
+    const devices = config.tplink?.devices ?? {};
+    for (const [name, entry] of Object.entries(devices)) {
+      const descriptor = createDescriptor(name, entry, "tplink_toggle");
+      if (descriptor) out.push(descriptor);
+    }
+  }
+
+  if (enabled.has("wiz_toggle")) {
+    const devices = config.wiz?.devices ?? {};
+    for (const [name, entry] of Object.entries(devices)) {
+      const descriptor = createDescriptor(name, entry, "wiz_toggle");
+      if (descriptor) out.push(descriptor);
+    }
+  }
+
+  return out;
+}
+
+function createDescriptor(
+  name: string,
+  entry: DeviceEntry,
+  tool: "tplink_toggle" | "wiz_toggle"
+): DeviceDescriptor | null {
+  if (!entry?.ip) return null;
+  const aliasSet = new Set<string>();
+
+  const normalizedName = name.toLowerCase();
+  aliasSet.add(normalizedName);
+  aliasSet.add(humanize(name));
+
+  if (Array.isArray(entry.aliases)) {
+    for (const alias of entry.aliases) {
+      const value = alias?.toString().trim().toLowerCase();
+      if (value) aliasSet.add(value);
+    }
+  }
+
+  if (entry.room) {
+    const room = entry.room.toString().trim().toLowerCase();
+    if (room) {
+      aliasSet.add(room);
+      aliasSet.add(`${room} ${humanize(name)}`);
+      aliasSet.add(`all ${room}`);
+    }
+  }
+
+  const aliases = Array.from(aliasSet).filter((alias) => alias.length > 0);
+
+  return {
+    name,
+    ip: entry.ip,
+    room: entry.room,
+    tool,
+    aliases,
+  };
+}
+
+export function inferActionFromText(
+  text: string
+): "on" | "off" | "toggle" | null {
+  const lower = text.toLowerCase();
+  if (/(turn|switch|shut|power)[^\n]*off|\boff\b/.test(lower)) {
+    return "off";
+  }
+  if (/(turn|switch|power)[^\n]*on|\bon\b/.test(lower)) {
+    return "on";
+  }
+  if (lower.includes("toggle") || lower.includes("flip")) {
+    return "toggle";
+  }
+  return null;
+}
+
 export function shouldContinueConversation(reply: string): boolean {
   if (!reply) return false;
   const normalized = reply.toLowerCase();
@@ -61,4 +150,8 @@ export function shouldContinueConversation(reply: string): boolean {
     return true;
   }
   return false;
+}
+
+export function humanize(name: string): string {
+  return name.replace(/[_-]+/g, " ").trim().toLowerCase();
 }

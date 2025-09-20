@@ -1,7 +1,14 @@
 import fs from "fs";
 import path from "path";
 
-export type DeviceMap = Record<string, string>;
+export interface DeviceEntry {
+  ip: string;
+  room?: string;
+  aliases?: string[];
+}
+
+export type RawDeviceValue = string | Partial<DeviceEntry>;
+export type DeviceMap = Record<string, DeviceEntry>;
 
 export interface WeatherConfig {
   latitude: number;
@@ -39,7 +46,21 @@ export function loadConfig(configPath?: string): LoadedConfig {
       if (!fs.existsSync(resolved)) continue;
       const raw = fs.readFileSync(resolved, "utf8");
       const parsed = JSON.parse(raw) as AppConfig;
-      return { config: parsed, path: resolved };
+      const normalized: AppConfig = { ...parsed };
+
+      if (parsed.tplink?.devices) {
+        normalized.tplink = {
+          devices: normalizeDevices(parsed.tplink.devices as Record<string, RawDeviceValue>),
+        };
+      }
+
+      if (parsed.wiz?.devices) {
+        normalized.wiz = {
+          devices: normalizeDevices(parsed.wiz.devices as Record<string, RawDeviceValue>),
+        };
+      }
+
+      return { config: normalized, path: resolved };
     } catch (err) {
       console.warn(`Failed to load config from ${candidate}:`, err);
     }
@@ -51,9 +72,44 @@ export function loadConfig(configPath?: string): LoadedConfig {
 export function resolveDevice(
   devices: DeviceMap | undefined,
   nameOrIp: string
-): string | null {
+): DeviceEntry | null {
   if (!nameOrIp) return null;
   if (devices && devices[nameOrIp]) return devices[nameOrIp];
-  if (/^\d+\.\d+\.\d+\.\d+$/.test(nameOrIp)) return nameOrIp;
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(nameOrIp)) return { ip: nameOrIp };
   return null;
+}
+
+function normalizeDevices(
+  input: Record<string, RawDeviceValue> | undefined
+): DeviceMap {
+  const out: DeviceMap = {};
+  if (!input) return out;
+
+  for (const [name, value] of Object.entries(input)) {
+    if (typeof value === "string") {
+      out[name] = { ip: value };
+      continue;
+    }
+
+    if (value && typeof value.ip === "string") {
+      out[name] = {
+        ip: value.ip,
+        room: value.room,
+        aliases: Array.isArray(value.aliases)
+          ? value.aliases
+              .map((alias) =>
+                typeof alias === "string" ? alias.trim() : String(alias)
+              )
+              .filter((alias) => alias.length > 0)
+          : undefined,
+      };
+      continue;
+    }
+
+    console.warn(
+      `Invalid device configuration for "${name}"; expected string or object with ip.`
+    );
+  }
+
+  return out;
 }

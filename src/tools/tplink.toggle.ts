@@ -132,21 +132,22 @@ const tplinkToggle: Tool = {
       return { ok: false, message: "Device name is required" };
     }
 
-    const host = resolveDevice(ctx.config.tplink?.devices, deviceName);
-    if (!host) {
+    const entry = resolveDevice(ctx.config.tplink?.devices, deviceName);
+    if (!entry?.ip) {
       return {
         ok: false,
         message:
           "Unknown TP-Link device. Update config.tplink.devices in config.json with name to IP mappings.",
       };
     }
+    const host = entry.ip;
 
     const action: Action = ["on", "off", "toggle"].includes(args.action)
       ? args.action
       : "toggle";
 
     ctx.log(
-      `[tplink_toggle] Request -> device:"${deviceName}" host:${host} action:${action}`
+      `[tplink_toggle] Request -> device:"${deviceName}" host:${host} room:${entry.room ?? "-"} action:${action}`
     );
 
     let lastError: any = null;

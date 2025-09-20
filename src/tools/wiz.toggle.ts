@@ -105,21 +105,22 @@ const wizToggle: Tool = {
       return { ok: false, message: "Device name is required" };
     }
 
-    const host = resolveDevice(ctx.config.wiz?.devices, deviceName);
-    if (!host) {
+    const entry = resolveDevice(ctx.config.wiz?.devices, deviceName);
+    if (!entry?.ip) {
       return {
         ok: false,
         message:
           "Unknown WiZ device. Add it to config.wiz.devices with a name to IP mapping.",
       };
     }
+    const host = entry.ip;
 
     const action: string = ["on", "off", "toggle"].includes(args.action)
       ? args.action
       : "toggle";
 
     ctx.log(
-      `[wiz_toggle] Request -> device:"${deviceName}" host:${host} action:${action} brightness:${args.brightness}`
+      `[wiz_toggle] Request -> device:"${deviceName}" host:${host} room:${entry.room ?? "-"} action:${action} brightness:${args.brightness}`
     );
 
     try {

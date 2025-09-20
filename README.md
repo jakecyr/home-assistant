@@ -84,18 +84,31 @@ All configuration lives in `.env` and is loaded via `dotenv` when the process st
 
 You can provide persistent device mappings and weather defaults via `config.json` (or `assistant.config.json`) in the project root. Point to another path with `npm start -- --config /path/to/config.json` or `./scripts/run.sh --config /path/to/config.json`.
 
+The optional `tools` array controls which integrations are enabled. Leaving it empty disables tool calling entirely (useful when you just want conversation without incurring extra API tokens).
+
 ```json
 {
   "tools": ["tplink_toggle", "wiz_toggle", "time_now"],
   "tplink": {
     "devices": {
-      "living_room_plug": "192.168.1.42",
-      "desk_lamp": "192.168.1.43"
+      "living_room_plug": {
+        "ip": "192.168.1.42",
+        "room": "living room",
+        "aliases": ["couch plug", "sofa outlet"]
+      },
+      "desk_lamp": {
+        "ip": "192.168.1.43",
+        "room": "office",
+        "aliases": ["desk light"]
+      }
     }
   },
   "wiz": {
     "devices": {
-      "sofa_light": "192.168.1.90"
+      "sofa_light": {
+        "ip": "192.168.1.90",
+        "room": "living room"
+      }
     }
   },
   "weather": {
@@ -108,6 +121,14 @@ You can provide persistent device mappings and weather defaults via `config.json
 ```
 
 Device tools accept either the friendly name or a raw IP address. Update the JSON whenever a bulb or plug changes networks.
+
+Each device entry can include:
+
+- `ip` (required): the device IP address.
+- `room` (optional): used so commands like “turn off the living room lights” target every device in that room.
+- `aliases` (optional): extra phrases that should map to that device (e.g., “floor lamp”).
+
+With `room` and `aliases` defined, Jarvis can respond to phrases like “turn off the tall lamp” or “switch off all living room lights” without extra prompt engineering.
 
 Supported tool names:
 
