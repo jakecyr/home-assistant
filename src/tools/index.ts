@@ -10,6 +10,11 @@ export type ToolRegistry = {
 const tools: Tool[] = [
   require("./lights.off").default,
   require("./lights.on").default,
+  require("./tplink.toggle").default,
+  require("./wiz.toggle").default,
+  require("./weather").default,
+  require("./time.now").default,
+  require("./web.search").default,
 ];
 
 export async function loadTools(): Promise<ToolRegistry> {

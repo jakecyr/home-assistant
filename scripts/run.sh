@@ -15,7 +15,7 @@ cleanup() {
 trap cleanup INT TERM
 
 while true; do
-  npm start
+  npm start -- "$@"
   status=$?
   if [[ $status -eq 0 ]]; then
     echo "Process exited cleanly. Restarting in 2s..."

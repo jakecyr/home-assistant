@@ -16,9 +16,28 @@ import {
   OPENAI_API_KEY,
   AUDIO_DEVICE,
   TTS_VOICE,
+  SERPAPI_KEY,
 } from "./env";
+import { loadConfig } from "./config";
 
 let registryPromise = loadTools(); // lazy-load once
+
+const cliArgs = process.argv.slice(2);
+let configPathArg: string | undefined;
+for (let i = 0; i < cliArgs.length; i++) {
+  const arg = cliArgs[i];
+  if (arg === "--config" && cliArgs[i + 1]) {
+    configPathArg = cliArgs[i + 1];
+    i++;
+  }
+}
+
+const { config: appConfig, path: loadedConfigPath } = loadConfig(configPathArg);
+if (loadedConfigPath) {
+    console.log(`Loaded config from ${loadedConfigPath}`);
+} else if (configPathArg) {
+    console.warn(`Config file ${configPathArg} not found; proceeding with defaults.`);
+}
 
 const MAX_HISTORY_MESSAGES = 12; // keep the last 6 user/assistant pairs
 let conversationHistory: ChatCompletionMessageParam[] = [];
@@ -35,6 +54,10 @@ async function thinkAndAct(transcript: string): Promise<string> {
 
   const ctx = {
     log: (...a: any[]) => console.log("[tool]", ...a),
+    config: appConfig,
+    env: {
+      serpApiKey: SERPAPI_KEY,
+    },
   };
 
   const { finalText, turns } = await runAgentWithTools(
@@ -421,7 +444,7 @@ function resetToIdle() {
   console.log('…back to IDLE (listening for "Jarvis")');
   if (transcriber) {
     const current = transcriber;
-      transcriber = null;
+    transcriber = null;
     current
       .close(false)
       .catch((err) => console.warn("Failed to close transcriber during reset:", err));

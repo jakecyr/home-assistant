@@ -1,0 +1,13 @@
+{
+  "tplink": {
+    "devices": {}
+  },
+  "wiz": {
+    "devices": {}
+  },
+  "weather": {
+    "latitude": 38.8458,
+    "longitude": -77.3242,
+    "timezone": "America/New_York"
+  }
+}

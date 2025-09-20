@@ -14,6 +14,7 @@ This project is a TypeScript/Node.js voice assistant designed to run on a Raspbe
 - **Utterance handling:** If AssemblyAI returns an empty transcript the assistant apologises, keeps listening once more without the wake word, and only falls back to IDLE after a second miss. Background chatter is down-weighted via the system prompt so the agent stays quiet unless addressed.
 - **Follow-up context:** After responding, the assistant immediately listens for a reply without requiring the wake word again, and it maintains a rolling history of recent exchanges (about six turns) so follow-up questions have context even after subsequent wake words.
 - **Pluggable tools:** Tool metadata is converted to OpenAI function specs and executed inside `runAgentWithTools`, so you can expand the assistant by adding new files next to `lights.on.ts` and `lights.off.ts`.
+- **Device & data integrations:** Built-in tools can toggle TP-Link Kasa plugs, Philips WiZ bulbs, fetch the weather, report the time/date, and run live web searches (via SerpAPI).
 
 ## Prerequisites
 
@@ -65,8 +66,57 @@ All configuration lives in `.env` and is loaded via `dotenv` when the process st
 | `OPENAI_API_KEY`       | ✅       | API key for the OpenAI Responses API.                                                   | –             |
 | `AUDIO_DEVICE`         | ⬜️      | Microphone identifier (`default`, a numeric index, or a substring of the device label). | `default`     |
 | `OPENAI_MODEL`         | ⬜️      | Chat/completions model ID to use for tool calls.                                        | `gpt-4o-mini` |
-| `TTS_VOICE`            | ⬜️      | OpenAI voice name for synthesized responses (`alloy`, `ash`, `coral`, etc.).            | `alloy`       |
+| `TTS_VOICE`            | ⬜️      | OpenAI voice name for synthesized responses (`alloy`, `ash`, `coral`, etc.).            | `onyx`        |
+| `SERPAPI_KEY`          | ⬜️      | SerpAPI key to enable the `web_search` tool.                                            | –             |
 | `ALLOW_SHELL`          | ⬜️      | Reserved for optional shell tooling—leave `false` unless you add such a tool yourself.  | `false`       |
+
+### Optional config file
+
+You can provide persistent device mappings and weather defaults via `config.json` (or `assistant.config.json`) in the project root. Point to another path with `npm start -- --config /path/to/config.json` or `scripts/run.sh -- --config /path/to/config.json`.
+
+```json
+{
+  "tplink": {
+    "devices": {
+      "living_room_plug": "192.168.1.42",
+      "desk_lamp": "192.168.1.43"
+    }
+  },
+  "wiz": {
+    "devices": {
+      "sofa_light": "192.168.1.90"
+    }
+  },
+  "weather": {
+    "latitude": 47.6062,
+    "longitude": -122.3321,
+    "units": "imperial",
+    "timezone": "America/Los_Angeles"
+  }
+}
+```
+
+Device tools accept either the friendly name or a raw IP address. Update the JSON whenever a bulb or plug changes networks.
+
+#### Discovering devices automatically
+
+Use the helper scripts to discover and optionally merge devices into your config file:
+
+```bash
+# Scan for TP-Link Kasa plugs and write them into config.json
+node scripts/scan-tplink.js --write
+
+# Scan for Philips WiZ bulbs and append them to config.json
+node scripts/scan-wiz.js --write
+
+# Specify a custom config path and overwrite existing entries if needed
+node scripts/scan-tplink.js --config ./my-config.json --write --force
+
+# Detect your approximate coordinates via IP and store them
+node scripts/setup-weather.js --write
+```
+
+Each script prints the devices it finds (alias, IP, model) and, when `--write` is supplied, merges new entries into the `tplink.devices` or `wiz.devices` sections.
 
 ## API keys
 
@@ -130,6 +180,8 @@ The assistant is optimized for a Raspberry Pi 4/5 (64-bit Raspberry Pi OS) with 
 - Add new tool files to `src/tools` that implement the `Tool` interface and export `name`, `description`, `parameters`, and `execute`.
 - Re-run `npm run build` after adding or editing TypeScript files.
 - Update downstream hardware integrations (e.g., replace the placeholder lighting code with real GPIO or smart-home API calls).
+- Provide config-driven lookups via `loadConfig` (see `src/config.ts`) if your tools need user-defined settings.
+- Review the built-in tools (`tplink_toggle`, `wiz_toggle`, `weather_current`, `time_now`, `web_search`) for examples of network calls, configuration access, and environment secrets.
 
 ## Troubleshooting tips
 

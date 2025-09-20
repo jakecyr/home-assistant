@@ -5,9 +5,15 @@ export type JSONSchema = {
   additionalProperties?: boolean;
 };
 
+import type { AppConfig } from "../config";
+
 export interface ToolContext {
   // Add anything your tools might need: config, loggers, GPIO, HTTP clients, etc.
   log: (...args: any[]) => void;
+  config: AppConfig;
+  env: {
+    serpApiKey?: string;
+  };
 }
 
 export interface ToolResult {
