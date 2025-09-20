@@ -31,6 +31,8 @@ import {
 } from "./deviceContext";
 import { initializeLogging } from "./runtime/logging";
 import { attemptDirectDeviceControl } from "./runtime/deviceControl";
+import { TimerService } from "./runtime/timers";
+import { AlarmController } from "./runtime/alarm";
 
 const { config: appConfig, path: loadedConfigPath } = loadConfig(CONFIG_PATH);
 if (loadedConfigPath) {

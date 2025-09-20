@@ -13,6 +13,7 @@ const TOOL_LOADERS: Record<string, () => Tool> = {
   weather_current: () => require("./weather").default,
   time_now: () => require("./time.now").default,
   web_search: () => require("./web.search").default,
+  timer_set: () => require("./timer.set").default,
 };
 
 export type ToolName = keyof typeof TOOL_LOADERS;

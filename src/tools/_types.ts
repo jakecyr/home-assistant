@@ -6,6 +6,7 @@ export type JSONSchema = {
 };
 
 import type { AppConfig } from "../config";
+import type { TimerService } from "../runtime/timers";
 
 export interface ToolContext {
   // Add anything your tools might need: config, loggers, GPIO, HTTP clients, etc.
@@ -14,6 +15,7 @@ export interface ToolContext {
   env: {
     serpApiKey?: string;
   };
+  timers?: TimerService;
 }
 
 export interface ToolResult {
