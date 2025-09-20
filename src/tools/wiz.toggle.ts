@@ -118,6 +118,10 @@ const wizToggle: Tool = {
       ? args.action
       : "toggle";
 
+    ctx.log(
+      `[wiz_toggle] Request -> device:"${deviceName}" host:${host} action:${action} brightness:${args.brightness}`
+    );
+
     try {
       let desiredState: boolean;
       let desiredDimming: number | undefined = undefined;

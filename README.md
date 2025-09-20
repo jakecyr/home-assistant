@@ -45,13 +45,14 @@ This project is a TypeScript/Node.js voice assistant designed to run on a Raspbe
    The process prints `Jarvis on Pi starting…` and waits for you to say "Jarvis". Say the wake word and speak a request to exercise the end-to-end loop. If a supported command-line audio player is available, the reply is spoken aloud; otherwise you'll see a console warning reminding you to install one.
    - To keep the assistant running and restart on crashes, launch `scripts/run.sh` instead of `npm start`.
    - Pass a custom config file (see below) by appending `-- --config path/to/config.json`, e.g. `npm start -- --config config.json`.
+   - Capture a persistent log by providing `-- --log-file logs/jarvis.log` (the runner forwards flags the same way: `./scripts/run.sh --config config.json --log-file logs/jarvis.log`).
 
 ### Listing audio devices
 
 After `npm install`, you can enumerate device labels that `PvRecorder` sees:
 
 ```bash
-node -e "const { PvRecorder } = require('@picovoice/pvrecorder-node'); console.log(PvRecorder.getAvailableDevices().map((name, i) => `[${i}] ${name}`).join('\n'));"
+node scripts/list-audio-devices.js
 ```
 
 Set `AUDIO_DEVICE` in `.env` to one of the printed indexes or to a substring of the desired label. Leave it as `default` to let PortAudio choose.

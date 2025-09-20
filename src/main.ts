@@ -1,4 +1,4 @@
-import { promises as fs } from "fs";
+import { promises as fs, createWriteStream, existsSync, mkdirSync } from "fs";
 import { tmpdir } from "os";
 import path from "path";
 import { spawn, spawnSync } from "child_process";
@@ -24,11 +24,23 @@ let registryPromise = loadTools(); // lazy-load once
 
 const cliArgs = process.argv.slice(2);
 let configPathArg: string | undefined;
+let logFileArg: string | undefined;
+
 for (let i = 0; i < cliArgs.length; i++) {
   const arg = cliArgs[i];
-  if (arg === "--config" && cliArgs[i + 1]) {
-    configPathArg = cliArgs[i + 1];
-    i++;
+  switch (arg) {
+    case "--config":
+      if (cliArgs[i + 1]) {
+        configPathArg = cliArgs[++i];
+      }
+      break;
+    case "--log-file":
+      if (cliArgs[i + 1]) {
+        logFileArg = cliArgs[++i];
+      }
+      break;
+    default:
+      break;
   }
 }
 
@@ -39,6 +51,68 @@ if (loadedConfigPath) {
     console.warn(`Config file ${configPathArg} not found; proceeding with defaults.`);
 }
 
+let logStream: ReturnType<typeof createWriteStream> | null = null;
+if (logFileArg) {
+  try {
+    const resolvedLog = path.resolve(logFileArg);
+    const logDir = path.dirname(resolvedLog);
+    if (!existsSync(logDir)) {
+      mkdirSync(logDir, { recursive: true });
+    }
+    logStream = createWriteStream(resolvedLog, { flags: "a" });
+    const startedAt = new Date().toISOString();
+    logStream.write(`[${startedAt}] --- Jarvis session started ---\n`);
+    console.log(`Logging output to ${resolvedLog}`);
+    const original = {
+      log: console.log.bind(console),
+      info: console.info?.bind(console) ?? console.log.bind(console),
+      warn: console.warn.bind(console),
+      error: console.error.bind(console),
+    };
+
+    const mirror = (level: keyof typeof original) =>
+      (...args: any[]) => {
+        original[level](...args);
+        try {
+          if (logStream) {
+            const timestamp = new Date().toISOString();
+            const message = args
+              .map((arg) =>
+                typeof arg === "string"
+                  ? arg
+                  : (() => {
+                      try {
+                        return JSON.stringify(arg);
+                      } catch {
+                        return String(arg);
+                      }
+                    })()
+              )
+              .join(" ");
+            logStream.write(`[${timestamp}] ${level.toUpperCase()} ${message}\n`);
+          }
+        } catch {
+          // ignore logging failures
+        }
+      };
+
+    console.log = mirror("log");
+    console.info = mirror("info");
+    console.warn = mirror("warn");
+    console.error = mirror("error");
+
+    process.on("exit", () => {
+      if (logStream) {
+        logStream.write(`[${new Date().toISOString()}] --- Jarvis session ended ---\n`);
+        logStream.end();
+      }
+    });
+  } catch (err) {
+    console.error(`Failed to set up log file at ${logFileArg}:`, err);
+    logStream = null;
+  }
+}
+
 const MAX_HISTORY_MESSAGES = 12; // keep the last 6 user/assistant pairs
 let conversationHistory: ChatCompletionMessageParam[] = [];
 
@@ -47,6 +121,36 @@ function pushHistory(role: "user" | "assistant", content: string) {
   if (conversationHistory.length > MAX_HISTORY_MESSAGES) {
     conversationHistory = conversationHistory.slice(-MAX_HISTORY_MESSAGES);
   }
+}
+
+function buildDeviceContextSummary(): string | null {
+  const sections: string[] = [];
+
+  const tplinkDevices = Object.keys(appConfig.tplink?.devices ?? {});
+  if (tplinkDevices.length) {
+    sections.push(
+      `TP-Link devices available: ${tplinkDevices
+        .map((name) => `"${name}"`)
+        .join(", ")}. Use these names when controlling TP-Link plugs or bulbs.`
+    );
+  }
+
+  const wizDevices = Object.keys(appConfig.wiz?.devices ?? {});
+  if (wizDevices.length) {
+    sections.push(
+      `WiZ lights available: ${wizDevices
+        .map((name) => `"${name}"`)
+        .join(", ")}. Use these names when controlling WiZ lights.`
+    );
+  }
+
+  if (!sections.length) return null;
+
+  sections.push(
+    "If the user refers to a light or plug, pick the matching device name above when calling a tool."
+  );
+
+  return sections.join("\n");
 }
 
 async function thinkAndAct(transcript: string): Promise<string> {
@@ -64,7 +168,11 @@ async function thinkAndAct(transcript: string): Promise<string> {
     transcript,
     registry,
     ctx,
-    { maxTurns: 6, history: conversationHistory }
+    {
+      maxTurns: 6,
+      history: conversationHistory,
+      extraSystemContext: buildDeviceContextSummary() ?? undefined,
+    }
   );
   console.log(`🤖 (${turns} turn${turns === 1 ? "" : "s"}) ${finalText}`);
   pushHistory("user", transcript);
@@ -100,6 +208,7 @@ let transcriber: StreamingTranscriber | null = null;
 let transcriberReady = false;
 let activeConversation: Promise<void> | null = null;
 let conversationBuffer = Buffer.alloc(0);
+let listeningEarconActive = false;
 
 // Buffers dedicated to each stage
 let idleBuf = Buffer.alloc(0); // for Porcupine frames
@@ -366,6 +475,7 @@ async function startAAI(): Promise<string> {
       finished = true;
       transcriberReady = false;
       conversationBuffer = Buffer.alloc(0);
+      listeningEarconActive = false;
       try {
         await sessionTranscriber.close();
       } catch (err) {
@@ -381,6 +491,13 @@ async function startAAI(): Promise<string> {
         transcriberReady = true;
         console.log("🎧 AssemblyAI session ready—start speaking.");
         flushConversationAudio();
+        playEarcon("start")
+          .then(() => {
+            listeningEarconActive = true;
+          })
+          .catch(() => {
+            listeningEarconActive = false;
+          });
       }
     });
 
@@ -485,17 +602,22 @@ async function captureUserUtterance(): Promise<string | null> {
   for (let attempt = 0; attempt < 2; attempt++) {
     conversationBuffer = Buffer.alloc(0);
     state = "LISTENING";
-    await playEarcon("start");
     try {
       const result = await startAAI();
       const trimmed = result.trim();
       if (trimmed) {
-        await playEarcon("stop");
+        if (listeningEarconActive) {
+          await playEarcon("stop");
+          listeningEarconActive = false;
+        }
         return trimmed;
       }
 
       await speak("I'm sorry, I didn't get that. Please try again.");
-      await playEarcon("stop");
+      if (listeningEarconActive) {
+        await playEarcon("stop");
+        listeningEarconActive = false;
+      }
       if (attempt === 0) {
         console.log("No transcript captured; continuing to listen without the wake word.");
         continue;
@@ -505,7 +627,10 @@ async function captureUserUtterance(): Promise<string | null> {
       return null;
     } catch (e) {
       console.error("AAI error:", e);
-      await playEarcon("stop");
+      if (listeningEarconActive) {
+        await playEarcon("stop");
+        listeningEarconActive = false;
+      }
       return null;
     }
   }

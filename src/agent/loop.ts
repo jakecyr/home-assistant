@@ -59,12 +59,21 @@ export async function runAgentWithTools(
   {
     maxTurns = 6,
     history = [],
-  }: { maxTurns?: number; history?: ChatCompletionMessageParam[] } = {}
+    extraSystemContext,
+  }: {
+    maxTurns?: number;
+    history?: ChatCompletionMessageParam[];
+    extraSystemContext?: string;
+  } = {}
 ): Promise<{ finalText: string; turns: number }> {
-  const system = `You are Jarvis, a voice agent on a Raspberry Pi.
+  const baseSystem = `You are Jarvis, a voice agent on a Raspberry Pi.
 Only respond when the user is clearly addressing you. If the transcript sounds like background chatter, off-topic speech, or another conversation, politely ignore it with a very brief acknowledgement like "No problem, I'll stay quiet." and wait for more input.
 When tools are available, decide if any are needed. If you call tools, wait for their results before replying to the user.
 Be concise. If no tools are needed, reply directly to the user.`;
+
+  const system = extraSystemContext
+    ? `${baseSystem}\n\n${extraSystemContext}`
+    : baseSystem;
 
   let lastToolMessage: string | null = null;
 

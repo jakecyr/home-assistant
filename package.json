@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "build": "tsc",
+    "lint": "tsc --noEmit",
     "start": "node lib/main.js"
   },
   "keywords": [],
