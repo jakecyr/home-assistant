@@ -688,11 +688,21 @@ async function handleConversationLoop() {
     console.log(`\n🗣️  "${transcript}"`);
     const finalReply = await thinkAndAct(transcript); // <-- tool-driven loop
     const trimmedReply = finalReply.trim();
-    if (!trimmedReply || !trimmedReply.endsWith("?")) {
+    if (!shouldContinueConversation(trimmedReply)) {
       resetToIdle();
       return;
     }
   }
+}
+
+function shouldContinueConversation(reply: string): boolean {
+  if (!reply) return false;
+  const lower = reply.toLowerCase();
+  if (reply.includes("?")) return true;
+  if (lower.match(/\b(say\s+yes|say\s+no|let\s+me\s+know|please\s+confirm)\b/)) {
+    return true;
+  }
+  return false;
 }
 
 function processAudioChunk(chunk: Buffer) {
