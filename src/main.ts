@@ -1,10 +1,9 @@
-import { promises as fs, createWriteStream, existsSync, mkdirSync } from "fs";
+import { promises as fs } from "fs";
 import { tmpdir } from "os";
 import path from "path";
 import { spawn, spawnSync } from "child_process";
 import { randomUUID } from "crypto";
 import { loadTools } from "./tools";
-import type { ToolRegistry } from "./tools";
 import type { ToolContext } from "./tools/_types";
 import { runAgentWithTools } from "./agent/loop";
 import { openai } from "./agent/openai";
@@ -27,11 +26,11 @@ import {
 import { loadConfig } from "./config";
 import {
   buildDeviceContextSummary,
-  buildDeviceDescriptors,
   getAllDeviceNames,
-  inferActionFromText,
   shouldContinueConversation,
 } from "./deviceContext";
+import { initializeLogging } from "./runtime/logging";
+import { attemptDirectDeviceControl } from "./runtime/deviceControl";
 
 const { config: appConfig, path: loadedConfigPath } = loadConfig(CONFIG_PATH);
 if (loadedConfigPath) {
@@ -54,71 +53,9 @@ const ENABLED_TOOLS = Array.from(
 
 const registryPromise = loadTools(ENABLED_TOOLS);
 
-let logStream: ReturnType<typeof createWriteStream> | null = null;
-if (LOG_FILE) {
-  try {
-    const resolvedLog = path.resolve(LOG_FILE);
-    const logDir = path.dirname(resolvedLog);
-    if (!existsSync(logDir)) {
-      mkdirSync(logDir, { recursive: true });
-    }
-    logStream = createWriteStream(resolvedLog, { flags: "a" });
-    const startedAt = new Date().toISOString();
-    logStream.write(`[${startedAt}] --- Jarvis session started ---\n`);
-    console.log(`Logging output to ${resolvedLog}`);
-    const original = {
-      log: console.log.bind(console),
-      info: console.info?.bind(console) ?? console.log.bind(console),
-      warn: console.warn.bind(console),
-      error: console.error.bind(console),
-    };
-
-    const mirror =
-      (level: keyof typeof original) =>
-      (...args: any[]) => {
-        original[level](...args);
-        try {
-          if (logStream) {
-            const timestamp = new Date().toISOString();
-            const message = args
-              .map((arg) =>
-                typeof arg === "string"
-                  ? arg
-                  : (() => {
-                      try {
-                        return JSON.stringify(arg);
-                      } catch {
-                        return String(arg);
-                      }
-                    })()
-              )
-              .join(" ");
-            logStream.write(
-              `[${timestamp}] ${level.toUpperCase()} ${message}\n`
-            );
-          }
-        } catch {
-          // ignore logging failures
-        }
-      };
-
-    console.log = mirror("log");
-    console.info = mirror("info");
-    console.warn = mirror("warn");
-    console.error = mirror("error");
-
-    process.on("exit", () => {
-      if (logStream) {
-        logStream.write(
-          `[${new Date().toISOString()}] --- Jarvis session ended ---\n`
-        );
-        logStream.end();
-      }
-    });
-  } catch (err) {
-    console.error(`Failed to set up log file at ${LOG_FILE}:`, err);
-    logStream = null;
-  }
+const loggingHandle = initializeLogging(LOG_FILE);
+if (loggingHandle.logPath) {
+  console.log(`Logging output to ${loggingHandle.logPath}`);
 }
 
 const MAX_HISTORY_MESSAGES = 12; // keep the last 6 user/assistant pairs
@@ -142,7 +79,13 @@ async function thinkAndAct(transcript: string): Promise<string> {
     },
   };
 
-  const direct = await maybeHandleDeviceControl(transcript, registry, ctx);
+  const direct = await attemptDirectDeviceControl(
+    transcript,
+    appConfig,
+    ENABLED_TOOLS,
+    registry,
+    ctx
+  );
   if (direct) {
     const { message } = direct;
     console.log(`🤖 (direct) ${message}`);
@@ -701,88 +644,6 @@ async function handleConversationLoop() {
     }
   }
 }
-
-function formatDeviceName(name: string): string {
-  return name
-    .split(/[_-]/g)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-async function maybeHandleDeviceControl(
-  transcript: string,
-  registry: ToolRegistry,
-  ctx: ToolContext
-): Promise<{ message: string; toolUsed: boolean } | null> {
-  const descriptors = buildDeviceDescriptors(appConfig, ENABLED_TOOLS);
-  if (!descriptors.length) return null;
-
-  const lower = transcript.toLowerCase();
-  const matches = new Map<string, (typeof descriptors)[number]>();
-
-  for (const descriptor of descriptors) {
-    for (const alias of descriptor.aliases) {
-      if (alias && lower.includes(alias)) {
-        matches.set(descriptor.name, descriptor);
-        break;
-      }
-    }
-  }
-
-  if (!matches.size) return null;
-
-  const matched = Array.from(matches.values());
-  const action = inferActionFromText(transcript);
-
-  if (!action) {
-    const names = matched.map((d) => formatDeviceName(d.name));
-    const list = names.join(" and ");
-    const question =
-      names.length > 1
-        ? `Do you want me to turn the devices ${list} on or off?`
-        : `Do you want me to turn ${list} on or off?`;
-    return { message: question, toolUsed: false };
-  }
-
-  const responses: string[] = [];
-  let anySuccess = false;
-
-  for (const descriptor of matched) {
-    if (!registry.names.includes(descriptor.tool)) {
-      responses.push(
-        `${formatDeviceName(descriptor.name)} can't be controlled because ${descriptor.tool} is disabled.`
-      );
-      continue;
-    }
-
-    const result = await registry.exec(
-      descriptor.tool,
-      { device: descriptor.name, action },
-      ctx
-    );
-
-    if (result.ok) {
-      anySuccess = true;
-      responses.push(
-        result.message ||
-          `${formatDeviceName(descriptor.name)} turned ${action === "toggle" ? "on/off" : action}.`
-      );
-    } else {
-      responses.push(
-        result.message ||
-          `Failed to control ${formatDeviceName(descriptor.name)}.`
-      );
-    }
-  }
-
-  if (!responses.length) return null;
-
-  return {
-    message: responses.join(" ").trim(),
-    toolUsed: anySuccess,
-  };
-}
-
 function processAudioChunk(chunk: Buffer) {
   try {
     if (state === "IDLE") {
@@ -886,8 +747,13 @@ function start() {
     } finally {
       recorder = null;
     }
+    loggingHandle.shutdown();
     process.exit(0);
   });
 }
+
+process.on("exit", () => {
+  loggingHandle.shutdown();
+});
 
 start();

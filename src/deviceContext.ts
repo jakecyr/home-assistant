@@ -93,7 +93,7 @@ function createDescriptor(
 
   const normalizedName = name.toLowerCase();
   aliasSet.add(normalizedName);
-  aliasSet.add(humanize(name));
+  aliasSet.add(humanize(name).toLowerCase());
 
   if (Array.isArray(entry.aliases)) {
     for (const alias of entry.aliases) {
@@ -106,12 +106,14 @@ function createDescriptor(
     const room = entry.room.toString().trim().toLowerCase();
     if (room) {
       aliasSet.add(room);
-      aliasSet.add(`${room} ${humanize(name)}`);
+      aliasSet.add(`${room} ${humanize(name).toLowerCase()}`);
       aliasSet.add(`all ${room}`);
     }
   }
 
-  const aliases = Array.from(aliasSet).filter((alias) => alias.length > 0);
+  const aliases = Array.from(aliasSet)
+    .map((alias) => alias.trim().toLowerCase())
+    .filter((alias) => alias.length > 0);
 
   return {
     name,
@@ -153,5 +155,10 @@ export function shouldContinueConversation(reply: string): boolean {
 }
 
 export function humanize(name: string): string {
-  return name.replace(/[_-]+/g, " ").trim().toLowerCase();
+  return name
+    .replace(/[_-]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
 }

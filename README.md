@@ -238,3 +238,4 @@ The assistant is optimized for a Raspberry Pi 4/5 (64-bit Raspberry Pi OS) with 
 - **Wake word not triggering:** Double-check that the Porcupine access key is valid and that the microphone is routed to the selected device index.
 - **No transcript:** Ensure the AssemblyAI key has real-time access and that outbound `wss://` traffic is allowed by your firewall.
 - **Model refuses tool calls:** Confirm `OPENAI_MODEL` names a tool-capable model and that the tool schema matches the arguments you expect.
+- **Volume too low on Raspberry PI:** The volume can be increased by running the command `amixer sset Master 90%` with the desired volume percentage.
