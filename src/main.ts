@@ -15,11 +15,12 @@ import {
   ASSEMBLYAI_API_KEY,
   OPENAI_API_KEY,
   AUDIO_DEVICE,
-  TTS_VOICE,
   SERPAPI_KEY,
   DEBUG_MODE,
   CONFIG_PATH,
   LOG_FILE,
+  OPENAI_VOICE_MODEL,
+  OPENAI_VOICE_NAME,
 } from "./env";
 import { loadConfig } from "./config";
 import {
@@ -27,8 +28,6 @@ import {
   getAllDeviceNames,
   shouldContinueConversation,
 } from "./deviceContext";
-
-let registryPromise = loadTools(); // lazy-load once
 
 const { config: appConfig, path: loadedConfigPath } = loadConfig(CONFIG_PATH);
 if (loadedConfigPath) {
@@ -38,6 +37,18 @@ if (loadedConfigPath) {
     `Config file ${CONFIG_PATH} not found; proceeding with defaults.`
   );
 }
+
+const ENABLED_TOOLS = Array.from(
+  new Set(
+    Array.isArray(appConfig.tools)
+      ? appConfig.tools
+          .map((name) => (typeof name === "string" ? name.trim() : ""))
+          .filter((name) => name.length > 0)
+      : []
+  )
+);
+
+const registryPromise = loadTools(ENABLED_TOOLS);
 
 let logStream: ReturnType<typeof createWriteStream> | null = null;
 if (LOG_FILE) {
@@ -132,20 +143,34 @@ async function thinkAndAct(transcript: string): Promise<string> {
       maxTurns: 6,
       history: conversationHistory,
       extraSystemContext:
-        buildDeviceContextSummary(appConfig) ?? undefined,
+        buildDeviceContextSummary(appConfig, ENABLED_TOOLS) ?? undefined,
       debugTools: DEBUG_MODE,
     });
   let responseText = finalText;
 
-  const deviceMentioned = transcript.match(/\b(light|lamp|plug|socket|switch)\b/i);
+  const deviceMentioned = transcript.match(
+    /\b(light|lamp|plug|socket|switch)\b/i
+  );
   if (!toolUsed && deviceMentioned) {
-    const names = getAllDeviceNames(appConfig);
-    if (names.length) {
-      responseText = `I didn't find a configured device matching that request. Try one of: ${names.join(", ")}.`;
-    } else {
+    const deviceToolsEnabled = ENABLED_TOOLS.filter(
+      (name) => name === "tplink_toggle" || name === "wiz_toggle"
+    );
+
+    if (!deviceToolsEnabled.length) {
       responseText =
-        "I don't have any smart devices configured yet. Update config.json with your TP-Link or WiZ devices.";
+        "Smart-device tools are disabled. Add tool names to the config 'tools' array to enable light or plug control.";
+    } else {
+      const names = getAllDeviceNames(appConfig, ENABLED_TOOLS);
+      if (names.length) {
+        responseText = `I didn't find a configured device matching that request. Try one of: ${names.join(
+          ", "
+        )}.`;
+      } else {
+        responseText =
+          "I don't have any smart devices configured yet. Update config.json with your TP-Link or WiZ devices.";
+      }
     }
+
     console.warn(
       "No tool was executed for a device-related request. Last tool message:",
       lastToolMessage
@@ -169,7 +194,6 @@ let state: State = "IDLE";
 
 const SAMPLE_RATE = 16000; // 16 kHz mono PCM16
 const AAI_CLIENT = new AssemblyAI({ apiKey: ASSEMBLYAI_API_KEY });
-const TTS_MODEL = "gpt-4o-mini-tts";
 
 type EarconType = "start" | "stop";
 
@@ -261,8 +285,8 @@ async function generateSpeechFile(text: string): Promise<string | null> {
   if (!trimmed) return null;
 
   const speech = await openai.audio.speech.create({
-    model: TTS_MODEL,
-    voice: TTS_VOICE,
+    model: OPENAI_VOICE_MODEL,
+    voice: OPENAI_VOICE_NAME,
     input: trimmed,
     response_format: "wav",
     instructions:
@@ -307,7 +331,7 @@ async function speak(text: string) {
     if (!filePath) return;
 
     try {
-      console.log(`🔊 Speaking (voice: ${TTS_VOICE})`);
+      console.log(`🔊 Speaking (voice: ${OPENAI_VOICE_NAME})`);
       await playAudioFile(filePath, player);
     } finally {
       await fs.unlink(filePath).catch(() => {});

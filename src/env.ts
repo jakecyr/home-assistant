@@ -3,11 +3,12 @@ import { config } from "dotenv";
 config();
 
 export const OPENAI_API_KEY = process.env.OPENAI_API_KEY!;
+export const OPENAI_VOICE_MODEL = process.env.OPENAI_VOICE_MODEL!;
+export const OPENAI_VOICE_NAME = process.env.OPENAI_VOICE_NAME!;
 export const PICOVOICE_ACCESS_KEY = process.env.PICOVOICE_ACCESS_KEY!;
 export const ASSEMBLYAI_API_KEY = process.env.ASSEMBLYAI_API_KEY!;
 export const AUDIO_DEVICE = process.env.AUDIO_DEVICE || "default";
-export const TTS_VOICE = process.env.TTS_VOICE || "onyx";
-export const SERPAPI_KEY = process.env.SERPAPI_KEY;
+export const SERPAPI_KEY = process.env.SERPAPI_KEY!;
 export let DEBUG_MODE = process.env.DEBUG_MODE === "true";
 
 const cliArgs = process.argv.slice(2);

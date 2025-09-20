@@ -12,7 +12,10 @@ describe("device context helpers", () => {
   };
 
   test("buildDeviceContextSummary lists devices", () => {
-    const summary = buildDeviceContextSummary(config);
+    const summary = buildDeviceContextSummary(config, [
+      "tplink_toggle",
+      "wiz_toggle",
+    ]);
     expect(summary).toContain("TP-Link devices available");
     expect(summary).toContain('"tall_lamp"');
     expect(summary).toContain("WiZ lights available");
@@ -20,11 +23,21 @@ describe("device context helpers", () => {
   });
 
   test("buildDeviceContextSummary returns null when no devices", () => {
-    expect(buildDeviceContextSummary({})).toBeNull();
+    expect(buildDeviceContextSummary({}, ["tplink_toggle"])).toBeNull();
+  });
+
+  test("buildDeviceContextSummary skips tools that are disabled", () => {
+    const summary = buildDeviceContextSummary(config, ["tplink_toggle"]);
+    expect(summary).toContain('"tall_lamp"');
+    expect(summary).not.toContain('"sofa_light"');
   });
 
   test("getAllDeviceNames returns all device keys", () => {
-    expect(getAllDeviceNames(config)).toEqual(["tall_lamp", "sofa_light"]);
+    expect(getAllDeviceNames(config, ["tplink_toggle", "wiz_toggle"])).toEqual([
+      "tall_lamp",
+      "sofa_light",
+    ]);
+    expect(getAllDeviceNames(config, ["tplink_toggle"])).toEqual(["tall_lamp"]);
   });
 
   test("shouldContinueConversation detects questions and confirmations", () => {

@@ -1,10 +1,14 @@
 import type { AppConfig } from "./config";
 
-export function buildDeviceContextSummary(config: AppConfig): string | null {
+export function buildDeviceContextSummary(
+  config: AppConfig,
+  enabledTools: string[] = []
+): string | null {
   const sections: string[] = [];
+  const enabled = new Set(enabledTools);
 
   const tplinkDevices = Object.keys(config.tplink?.devices ?? {});
-  if (tplinkDevices.length) {
+  if (tplinkDevices.length && enabled.has("tplink_toggle")) {
     sections.push(
       `TP-Link devices available: ${tplinkDevices
         .map((name) => `"${name}"`)
@@ -13,7 +17,7 @@ export function buildDeviceContextSummary(config: AppConfig): string | null {
   }
 
   const wizDevices = Object.keys(config.wiz?.devices ?? {});
-  if (wizDevices.length) {
+  if (wizDevices.length && enabled.has("wiz_toggle")) {
     sections.push(
       `WiZ lights available: ${wizDevices
         .map((name) => `"${name}"`)
@@ -30,11 +34,19 @@ export function buildDeviceContextSummary(config: AppConfig): string | null {
   return sections.join("\n");
 }
 
-export function getAllDeviceNames(config: AppConfig): string[] {
-  return [
-    ...Object.keys(config.tplink?.devices ?? {}),
-    ...Object.keys(config.wiz?.devices ?? {}),
-  ];
+export function getAllDeviceNames(
+  config: AppConfig,
+  enabledTools: string[] = []
+): string[] {
+  const enabled = new Set(enabledTools);
+  const names: string[] = [];
+  if (enabled.has("tplink_toggle")) {
+    names.push(...Object.keys(config.tplink?.devices ?? {}));
+  }
+  if (enabled.has("wiz_toggle")) {
+    names.push(...Object.keys(config.wiz?.devices ?? {}));
+  }
+  return names;
 }
 
 export function shouldContinueConversation(reply: string): boolean {

@@ -18,6 +18,7 @@ export interface AppConfig {
     devices: DeviceMap;
   };
   weather?: WeatherConfig;
+  tools?: string[];
 }
 
 const DEFAULT_CONFIG_FILENAMES = ["config.json", "assistant.config.json"];

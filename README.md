@@ -15,6 +15,7 @@ This project is a TypeScript/Node.js voice assistant designed to run on a Raspbe
 - **Follow-up context:** After responding, the assistant immediately listens for a reply without requiring the wake word again, and it maintains a rolling history of recent exchanges (about six turns) so follow-up questions have context even after subsequent wake words.
 - **Pluggable tools:** Tool metadata is converted to OpenAI function specs and executed inside `runAgentWithTools`, so you can expand the assistant by adding new files next to `lights.on.ts` and `lights.off.ts`.
 - **Device & data integrations:** Built-in tools can toggle TP-Link Kasa plugs, Philips WiZ bulbs, fetch the weather, report the time/date, and run live web searches (via SerpAPI).
+  - Tools are opt-in; add their names to the config `tools` array before they are exposed to the model.
 
 ## Prerequisites
 
@@ -39,10 +40,13 @@ This project is a TypeScript/Node.js voice assistant designed to run on a Raspbe
    npm run build
    ```
 5. Start the assistant:
+
    ```bash
    npm start
    ```
+
    The process prints `Jarvis on Pi starting…` and waits for you to say "Jarvis". Say the wake word and speak a request to exercise the end-to-end loop. If a supported command-line audio player is available, the reply is spoken aloud; otherwise you'll see a console warning reminding you to install one.
+
    - To keep the assistant running and restart on crashes, launch `scripts/run.sh` instead of `npm start`.
    - Pass a custom config file (see below) by appending `-- --config path/to/config.json`, e.g. `npm start -- --config config.json`.
    - Capture a persistent log by providing `-- --log-file logs/jarvis.log` (the runner forwards flags the same way: `./scripts/run.sh --config config.json --log-file logs/jarvis.log`).
@@ -73,7 +77,6 @@ All configuration lives in `.env` and is loaded via `dotenv` when the process st
 | `OPENAI_API_KEY`       | ✅       | API key for the OpenAI Responses API.                                                   | –             |
 | `AUDIO_DEVICE`         | ⬜️      | Microphone identifier (`default`, a numeric index, or a substring of the device label). | `default`     |
 | `OPENAI_MODEL`         | ⬜️      | Chat/completions model ID to use for tool calls.                                        | `gpt-4o-mini` |
-| `TTS_VOICE`            | ⬜️      | OpenAI voice name for synthesized responses (`alloy`, `ash`, `coral`, etc.).            | `onyx`        |
 | `SERPAPI_KEY`          | ⬜️      | SerpAPI key to enable the `web_search` tool.                                            | –             |
 | `ALLOW_SHELL`          | ⬜️      | Reserved for optional shell tooling—leave `false` unless you add such a tool yourself.  | `false`       |
 
@@ -83,6 +86,7 @@ You can provide persistent device mappings and weather defaults via `config.json
 
 ```json
 {
+  "tools": ["tplink_toggle", "wiz_toggle", "time_now"],
   "tplink": {
     "devices": {
       "living_room_plug": "192.168.1.42",
@@ -104,6 +108,16 @@ You can provide persistent device mappings and weather defaults via `config.json
 ```
 
 Device tools accept either the friendly name or a raw IP address. Update the JSON whenever a bulb or plug changes networks.
+
+Supported tool names:
+
+- `tplink_toggle`
+- `wiz_toggle`
+- `weather_current`
+- `time_now`
+- `web_search`
+
+If the `tools` array is omitted or left empty, no tools are enabled (the assistant will only respond conversationally).
 
 #### Discovering devices automatically
 
