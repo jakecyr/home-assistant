@@ -44,6 +44,7 @@ This project is a TypeScript/Node.js voice assistant designed to run on a Raspbe
    ```
    The process prints `Jarvis on Pi starting…` and waits for you to say "Jarvis". Say the wake word and speak a request to exercise the end-to-end loop. If a supported command-line audio player is available, the reply is spoken aloud; otherwise you'll see a console warning reminding you to install one.
    - To keep the assistant running and restart on crashes, launch `scripts/run.sh` instead of `npm start`.
+   - Pass a custom config file (see below) by appending `-- --config path/to/config.json`, e.g. `npm start -- --config config.json`.
 
 ### Listing audio devices
 
@@ -72,7 +73,7 @@ All configuration lives in `.env` and is loaded via `dotenv` when the process st
 
 ### Optional config file
 
-You can provide persistent device mappings and weather defaults via `config.json` (or `assistant.config.json`) in the project root. Point to another path with `npm start -- --config /path/to/config.json` or `scripts/run.sh -- --config /path/to/config.json`.
+You can provide persistent device mappings and weather defaults via `config.json` (or `assistant.config.json`) in the project root. Point to another path with `npm start -- --config /path/to/config.json` or `./scripts/run.sh --config /path/to/config.json`.
 
 ```json
 {
@@ -117,6 +118,14 @@ node scripts/setup-weather.js --write
 ```
 
 Each script prints the devices it finds (alias, IP, model) and, when `--write` is supplied, merges new entries into the `tplink.devices` or `wiz.devices` sections.
+
+When you're ready to run with a specific config file, start the assistant like:
+
+```bash
+./scripts/run.sh --config ./config.json
+# or use one of the sample files, e.g.
+./scripts/run.sh --config ./example.config.json
+```
 
 ## API keys
 
