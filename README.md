@@ -47,6 +47,11 @@ This project is a TypeScript/Node.js voice assistant designed to run on a Raspbe
    - Pass a custom config file (see below) by appending `-- --config path/to/config.json`, e.g. `npm start -- --config config.json`.
    - Capture a persistent log by providing `-- --log-file logs/jarvis.log` (the runner forwards flags the same way: `./scripts/run.sh --config config.json --log-file logs/jarvis.log`).
 
+6. Run tests (optional but recommended when developing tools):
+   ```bash
+   npm test
+   ```
+
 ### Listing audio devices
 
 After `npm install`, you can enumerate device labels that `PvRecorder` sees:

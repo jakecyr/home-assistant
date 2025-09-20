@@ -22,6 +22,11 @@ import {
   LOG_FILE,
 } from "./env";
 import { loadConfig } from "./config";
+import {
+  buildDeviceContextSummary,
+  getAllDeviceNames,
+  shouldContinueConversation,
+} from "./deviceContext";
 
 let registryPromise = loadTools(); // lazy-load once
 
@@ -111,43 +116,6 @@ function pushHistory(role: "user" | "assistant", content: string) {
   }
 }
 
-function buildDeviceContextSummary(): string | null {
-  const sections: string[] = [];
-
-  const tplinkDevices = Object.keys(appConfig.tplink?.devices ?? {});
-  if (tplinkDevices.length) {
-    sections.push(
-      `TP-Link devices available: ${tplinkDevices
-        .map((name) => `"${name}"`)
-        .join(", ")}. Use these names when controlling TP-Link plugs or bulbs.`
-    );
-  }
-
-  const wizDevices = Object.keys(appConfig.wiz?.devices ?? {});
-  if (wizDevices.length) {
-    sections.push(
-      `WiZ lights available: ${wizDevices
-        .map((name) => `"${name}"`)
-        .join(", ")}. Use these names when controlling WiZ lights.`
-    );
-  }
-
-  if (!sections.length) return null;
-
-  sections.push(
-    "If the user refers to a light or plug, select the matching device name above when calling a tool. If a requested device name is missing, inform the user rather than pretending success."
-  );
-
-  return sections.join("\n");
-}
-
-function getAllDeviceNames(): string[] {
-  return [
-    ...Object.keys(appConfig.tplink?.devices ?? {}),
-    ...Object.keys(appConfig.wiz?.devices ?? {}),
-  ];
-}
-
 async function thinkAndAct(transcript: string): Promise<string> {
   const registry = await registryPromise;
 
@@ -163,14 +131,15 @@ async function thinkAndAct(transcript: string): Promise<string> {
     await runAgentWithTools(transcript, registry, ctx, {
       maxTurns: 6,
       history: conversationHistory,
-      extraSystemContext: buildDeviceContextSummary() ?? undefined,
+      extraSystemContext:
+        buildDeviceContextSummary(appConfig) ?? undefined,
       debugTools: DEBUG_MODE,
     });
   let responseText = finalText;
 
   const deviceMentioned = transcript.match(/\b(light|lamp|plug|socket|switch)\b/i);
   if (!toolUsed && deviceMentioned) {
-    const names = getAllDeviceNames();
+    const names = getAllDeviceNames(appConfig);
     if (names.length) {
       responseText = `I didn't find a configured device matching that request. Try one of: ${names.join(", ")}.`;
     } else {
@@ -693,16 +662,6 @@ async function handleConversationLoop() {
       return;
     }
   }
-}
-
-function shouldContinueConversation(reply: string): boolean {
-  if (!reply) return false;
-  const lower = reply.toLowerCase();
-  if (reply.includes("?")) return true;
-  if (lower.match(/\b(say\s+yes|say\s+no|let\s+me\s+know|please\s+confirm)\b/)) {
-    return true;
-  }
-  return false;
 }
 
 function processAudioChunk(chunk: Buffer) {
