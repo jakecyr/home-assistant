@@ -21,9 +21,6 @@ export interface AppConfig {
   tplink?: {
     devices: DeviceMap;
   };
-  wiz?: {
-    devices: DeviceMap;
-  };
   weather?: WeatherConfig;
   tools?: string[];
 }
@@ -51,12 +48,6 @@ export function loadConfig(configPath?: string): LoadedConfig {
       if (parsed.tplink?.devices) {
         normalized.tplink = {
           devices: normalizeDevices(parsed.tplink.devices as Record<string, RawDeviceValue>),
-        };
-      }
-
-      if (parsed.wiz?.devices) {
-        normalized.wiz = {
-          devices: normalizeDevices(parsed.wiz.devices as Record<string, RawDeviceValue>),
         };
       }
 

@@ -3,6 +3,7 @@ import { config } from "dotenv";
 config();
 
 export const OPENAI_API_KEY = process.env.OPENAI_API_KEY!;
+export const OPENAI_TEXT_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 export const OPENAI_VOICE_MODEL = process.env.OPENAI_VOICE_MODEL!;
 export const OPENAI_VOICE_NAME = process.env.OPENAI_VOICE_NAME!;
 export const PICOVOICE_ACCESS_KEY = process.env.PICOVOICE_ACCESS_KEY!;
