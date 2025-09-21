@@ -21,6 +21,8 @@ export function buildDeviceContextSummary(
   sections.push(
     'If the user refers to a light or plug, select the matching device name above when calling a tool. If a requested device name is missing, inform the user rather than pretending success.',
   );
+  sections.push('Current date and time context: ' + new Date().toISOString());
+  sections.push('Current timezone: ' + Intl.DateTimeFormat().resolvedOptions().timeZone);
 
   return sections.join('\n');
 }

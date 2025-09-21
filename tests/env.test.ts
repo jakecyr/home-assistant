@@ -187,10 +187,10 @@ describe('config.ts', () => {
     });
 
     // Runtime reality: non-null assertion is only compile-time; values can be undefined.
-    // This test documents current behavior so future refactors can choose to hard-fail if desired.
+    // Defaults for voice model/name exist in src/env.ts; others may be undefined.
     expect(mod.OPENAI_API_KEY).toBe('sk');
-    expect(mod.OPENAI_VOICE_MODEL).toBeUndefined();
-    expect(mod.OPENAI_VOICE_NAME).toBeUndefined();
+    expect(mod.OPENAI_VOICE_MODEL).toBe('gpt-4o-mini-tts');
+    expect(mod.OPENAI_VOICE_NAME).toBe('onyx');
     expect(mod.PICOVOICE_ACCESS_KEY).toBeUndefined();
     expect(mod.ASSEMBLYAI_API_KEY).toBeUndefined();
     expect(mod.SERPAPI_KEY).toBeUndefined();
