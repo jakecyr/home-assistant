@@ -16,7 +16,16 @@ const loadConfigModule = (opts?: { env?: Record<string, string | undefined>; arg
   const originalEnv = process.env;
   const originalArgv = process.argv;
 
-  process.env = { ...originalEnv, ...(opts?.env ?? {}) };
+  process.env = { ...originalEnv } as NodeJS.ProcessEnv;
+  if (opts?.env) {
+    for (const [key, value] of Object.entries(opts.env)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
   process.argv = [
     process.execPath,
     path.join(process.cwd(), 'fake-script.js'),
@@ -168,6 +177,11 @@ describe('config.ts', () => {
     const mod = await loadConfigModule({
       env: {
         OPENAI_API_KEY: 'sk',
+        OPENAI_VOICE_MODEL: undefined,
+        OPENAI_VOICE_NAME: undefined,
+        PICOVOICE_ACCESS_KEY: undefined,
+        ASSEMBLYAI_API_KEY: undefined,
+        SERPAPI_KEY: undefined,
         // omit others
       },
     });

@@ -42,24 +42,25 @@ export class ToolOrchestrator {
     workingMessages.push(first.assistantMessage);
     appended.push(first.assistantMessage);
 
-    let action = first.action;
+    let action = normalizeAction(first.action);
     let toolUsed = false;
 
     if (Array.isArray(action.tool_calls) && action.tool_calls.length > 0) {
       toolUsed = true;
       action.tool_calls.forEach((call, index) => {
-        if (!call.arguments || typeof call.arguments !== "object") {
-          call.arguments = {};
-        }
         if (!call.name || typeof call.name !== "string") {
           throw new Error("Tool call missing name.");
+        }
+        if (typeof call.arguments_json !== "string") {
+          throw new Error(`Tool call ${call.name} missing arguments_json string.`);
         }
         (call as any).__id = `${call.name}-${index}`;
       });
 
       for (const call of action.tool_calls) {
         const callId = (call as any).__id as string;
-        const result = await this.invokeTool(call.name, call.arguments ?? {});
+        const args = this.parseArguments(call.arguments_json, call.name);
+        const result = await this.invokeTool(call.name, args);
         const toolMessage: LlmMessage = {
           role: "tool",
           tool_call_id: callId,
@@ -76,7 +77,7 @@ export class ToolOrchestrator {
       });
       workingMessages.push(second.assistantMessage);
       appended.push(second.assistantMessage);
-      action = second.action;
+      action = normalizeAction(second.action);
     }
 
     return { action, appendedMessages: appended, toolUsed };
@@ -95,4 +96,25 @@ export class ToolOrchestrator {
       };
     }
   }
+
+  private parseArguments(raw: string, toolName: string): any {
+    try {
+      if (!raw.trim()) return {};
+      return JSON.parse(raw);
+    } catch (err) {
+      console.warn(
+        `Failed to parse arguments for tool ${toolName}; passing empty object.`,
+        err
+      );
+      return {};
+    }
+  }
+}
+
+function normalizeAction(action: AssistantAction): AssistantAction {
+  return {
+    reply_text: action.reply_text ?? "",
+    expect_user_response: Boolean(action.expect_user_response),
+    tool_calls: Array.isArray(action.tool_calls) ? action.tool_calls : [],
+  };
 }

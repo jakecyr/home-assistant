@@ -12,16 +12,20 @@ export class AssemblyAiSTT implements STTPort {
   private handlers = new Set<TranscriptHandler>();
   private ready = false;
   private buffer = Buffer.alloc(0);
+  private pendingAudio = Buffer.alloc(0);
   private restarting = false;
   private sampleRate: number;
+  private readonly minChunkBytes: number;
 
   constructor(options: AssemblyAiOptions) {
     this.client = new AssemblyAI({ apiKey: options.apiKey });
     this.sampleRate = options.sampleRate ?? 16000;
+    this.minChunkBytes = Math.max(1, Math.round((this.sampleRate / 20) * 2)); // 50ms chunks
   }
 
   async start(): Promise<void> {
     if (this.transcriber) return;
+    console.log("[AAI] Starting streaming session...");
     await this.openSession();
   }
 
@@ -38,13 +42,17 @@ export class AssemblyAiSTT implements STTPort {
   }
 
   sendPcm(chunk: Buffer): void {
+    if (!chunk.length) return;
     if (!this.transcriber || !this.ready) {
       this.buffer = Buffer.concat([this.buffer, chunk]);
+      if (!this.ready && chunk.length) {
+        this.debugLog(`Buffered ${chunk.length} bytes (ready=${this.ready}).`);
+      }
       return;
     }
 
     try {
-      this.transcriber.sendAudio(chunk.buffer.slice(chunk.byteOffset, chunk.byteOffset + chunk.byteLength));
+      this.enqueueAudio(chunk);
     } catch (err) {
       console.error("Failed to stream audio frame:", err);
     }
@@ -68,9 +76,21 @@ export class AssemblyAiSTT implements STTPort {
         maxTurnSilence: 10000,
         minEndOfTurnSilenceWhenConfident: 2000,
       });
-      this.attach(transcriber);
-      await transcriber.connect();
       this.transcriber = transcriber;
+      this.attach(transcriber);
+      try {
+        await transcriber.connect();
+        console.log("[AAI] Streaming transcriber connected.");
+      } catch (err) {
+        console.error("[AAI] Failed to connect streaming transcriber:", err);
+        try {
+          await transcriber.close(false);
+        } catch {}
+        if (this.transcriber === transcriber) {
+          this.transcriber = null;
+        }
+        throw err;
+      }
     } finally {
       this.restarting = false;
     }
@@ -81,13 +101,15 @@ export class AssemblyAiSTT implements STTPort {
     let formattedTranscript = "";
 
     transcriber.on("open", () => {
-      if (this.transcriber === transcriber) {
-        this.ready = true;
-        this.flushBuffer();
-      }
+      this.ready = true;
+      console.log("🎧 AssemblyAI session ready—start speaking.");
+      this.flushBuffer();
     });
 
     transcriber.on("turn", (turn) => {
+      this.debugLog(
+        `[turn] order=${turn.turn_order} formatted=${turn.turn_is_formatted} end=${turn.end_of_turn} transcript="${turn.transcript || ''}"`
+      );
       if (typeof turn.transcript === "string" && turn.transcript.length) {
         if (turn.turn_is_formatted) {
           if (turn.transcript.length >= formattedTranscript.length) {
@@ -121,7 +143,10 @@ export class AssemblyAiSTT implements STTPort {
       this.restart();
     });
 
-    transcriber.on("close", () => {
+    transcriber.on("close", (code: number, reason: string) => {
+      console.warn(
+        `[AAI] Streaming transcriber closed (code=${code} reason=${reason}); restarting.`
+      );
       this.restart();
     });
   }
@@ -130,9 +155,7 @@ export class AssemblyAiSTT implements STTPort {
     if (!this.transcriber || !this.ready) return;
     if (!this.buffer.length) return;
     try {
-      this.transcriber.sendAudio(
-        this.buffer.buffer.slice(this.buffer.byteOffset, this.buffer.byteOffset + this.buffer.byteLength)
-      );
+      this.enqueueAudio(this.buffer);
     } catch (err) {
       console.error("Failed to flush buffered audio:", err);
     } finally {
@@ -150,6 +173,29 @@ export class AssemblyAiSTT implements STTPort {
       } catch {}
     }
     this.buffer = Buffer.alloc(0);
+    this.pendingAudio = Buffer.alloc(0);
+    console.log("[AAI] Restarting streaming session...");
     await this.openSession();
+  }
+
+  private debugLog(message: string) {
+    if (process.env.DEBUG_MODE === "true") {
+      console.log(`[AAI][debug] ${message}`);
+    }
+  }
+
+  private enqueueAudio(chunk: Buffer) {
+    this.pendingAudio = this.pendingAudio.length
+      ? Buffer.concat([this.pendingAudio, chunk])
+      : Buffer.from(chunk); // copy to avoid holding onto large buffers
+
+    while (this.pendingAudio.length >= this.minChunkBytes) {
+      const slice = this.pendingAudio.subarray(0, this.minChunkBytes);
+      this.pendingAudio = this.pendingAudio.subarray(this.minChunkBytes);
+      if (this.transcriber) {
+        this.debugLog(`Sending ${slice.length} bytes to AssemblyAI.`);
+        this.transcriber.sendAudio(slice.buffer.slice(slice.byteOffset, slice.byteOffset + slice.byteLength));
+      }
+    }
   }
 }

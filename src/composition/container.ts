@@ -5,6 +5,9 @@ import {
   ASSEMBLYAI_API_KEY,
   AUDIO_DEVICE,
   SERPAPI_KEY,
+  AUTO_LISTEN,
+  OPENAI_VOICE_MODEL,
+  OPENAI_VOICE_NAME,
 } from '../env';
 import { SimpleEventBus } from '../adapters/sys/SimpleEventBus';
 import { NodeTime } from '../adapters/sys/NodeTime';
@@ -43,16 +46,33 @@ export async function buildApplication(): Promise<ApplicationInstance> {
     console.log(`Loaded config from ${configPath}`);
   }
 
+  if (AUTO_LISTEN) {
+    console.log('Auto-listen enabled: start speaking when you are ready.');
+  }
+
   const bus = new SimpleEventBus();
   const time = new NodeTime();
   const audioOut = new PlayerAudioOutput();
-  const wakeWord = new PorcupineWakeWord({
-    accessKey: PICOVOICE_ACCESS_KEY,
-    keyword: 'jarvis',
-  });
+  const useWakeWord = !AUTO_LISTEN;
+  let wakeWord: PorcupineWakeWord | null = null;
+  if (useWakeWord) {
+    try {
+      wakeWord = new PorcupineWakeWord({
+        accessKey: PICOVOICE_ACCESS_KEY,
+        keyword: 'jarvis',
+      });
+    } catch (err) {
+      console.warn(
+        'Wake-word initialization failed; falling back to immediate listening.',
+        err,
+      );
+      wakeWord = null;
+    }
+  }
+  const frameLength = wakeWord ? wakeWord.frameLength : 512;
   const audioIn = new PvRecorderAudioInput({
     deviceLabel: AUDIO_DEVICE,
-    frameLength: wakeWord.frameLength,
+    frameLength,
   });
   const stt = new AssemblyAiSTT({ apiKey: ASSEMBLYAI_API_KEY });
   const tts = new OpenAiTTS();
@@ -121,14 +141,19 @@ export async function buildApplication(): Promise<ApplicationInstance> {
   const extraContext = buildDeviceContextSummary(appConfig, Array.from(enabledToolNames));
   const systemPrompt = buildSystemPrompt(extraContext);
 
-  const speechRenderer = new SpeechRenderer(audioOut, realtimeTts, tts);
+  const voiceEnabled = Boolean(OPENAI_VOICE_MODEL && OPENAI_VOICE_NAME);
+  const speechRenderer = new SpeechRenderer(audioOut, realtimeTts, tts, {
+    voiceEnabled,
+  });
 
   const conversationLoop = new ConversationLoop(bus, orchestrator, speechRenderer, {
     systemPrompt,
     continueConversation: shouldContinueConversation,
   });
 
-  const audioAssistant = new VoiceAssistant(bus, audioIn, wakeWord, stt);
+  const audioAssistant = new VoiceAssistant(bus, audioIn, wakeWord ?? undefined, stt, {
+    startListeningOnLaunch: AUTO_LISTEN || !wakeWord,
+  });
 
   const alarmManager = new AlarmManager(bus, audioOut, time, {
     toneFrequency: 880,
@@ -150,7 +175,7 @@ export async function buildApplication(): Promise<ApplicationInstance> {
     shutdown: async () => {
       await audioAssistant.stop();
       await stt.stop().catch(() => {});
-      wakeWord.dispose();
+      wakeWord?.dispose();
     },
   };
 }

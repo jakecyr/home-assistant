@@ -50,6 +50,7 @@ This project is a TypeScript/Node.js voice assistant designed to run on a Raspbe
    - To keep the assistant running and restart on crashes, launch `scripts/run.sh` instead of `npm start`.
    - Pass a custom config file (see below) by appending `-- --config path/to/config.json`, e.g. `npm start -- --config config.json`.
    - Capture a persistent log by providing `-- --log-file logs/jarvis.log` (the runner forwards flags the same way: `./scripts/run.sh --config config.json --log-file logs/jarvis.log`).
+   - Skip the wake word during local testing with `npm start -- --auto-listen` (or set `AUTO_LISTEN=true` in `.env`), so the assistant begins listening immediately.
 
 6. Run tests (optional but recommended when developing tools):
    ```bash

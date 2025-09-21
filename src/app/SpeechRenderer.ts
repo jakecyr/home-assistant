@@ -6,10 +6,12 @@ import { OpenAIRealtimeTTS } from "../adapters/speech/OpenAIRealtimeTTS";
 
 export interface SpeechRendererOptions {
   sampleRate?: number;
+  voiceEnabled?: boolean;
 }
 
 export class SpeechRenderer {
   private readonly sampleRate: number;
+  private readonly voiceEnabled: boolean;
 
   constructor(
     private readonly audioOut: AudioOutputPort,
@@ -18,17 +20,21 @@ export class SpeechRenderer {
     options: SpeechRendererOptions = {}
   ) {
     this.sampleRate = options.sampleRate ?? 16000;
+    this.voiceEnabled = options.voiceEnabled ?? true;
   }
 
   async render(action: AssistantAction): Promise<void> {
     const text = this.pickUtterance(action);
     if (!text) return;
 
+    if (!this.voiceEnabled) {
+      console.log(`💬 ${text}`);
+      return;
+    }
+
     if (typeof this.audioOut.playStream === "function") {
       try {
-        const stream = await this.realtimeTts.stream(text, {
-          ssml: action.speak_ssml,
-        });
+        const stream = await this.realtimeTts.stream(text);
         await this.audioOut.playStream(stream, {
           sampleRate: this.sampleRate,
         });

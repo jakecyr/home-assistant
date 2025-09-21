@@ -31,6 +31,7 @@ export class ConversationLoop {
     });
 
     this.bus.subscribe<string>(Topics.UtteranceCaptured, (text) => {
+      console.log(`📥 ConversationLoop received transcript: ${text}`);
       this.handleUserUtterance(text).catch((err) => {
         console.error("Conversation loop error:", err);
       });
@@ -49,7 +50,9 @@ export class ConversationLoop {
 
     this.history.push(userMessage);
 
+    console.log("🧠 Sending conversation messages to orchestrator (" + messages.length + " total).");
     const result = await this.orchestrator.run(messages);
+    console.log("🧠 Orchestrator returned action", result.action);
     this.appendToHistory(result.appendedMessages);
 
     if (result.toolUsed) {
@@ -71,6 +74,7 @@ export class ConversationLoop {
 
   private appendToHistory(messages: LlmMessage[]) {
     for (const msg of messages) {
+      if (msg.role === "tool") continue;
       this.history.push({ ...msg });
     }
   }

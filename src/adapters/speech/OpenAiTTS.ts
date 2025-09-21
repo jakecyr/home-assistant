@@ -13,6 +13,12 @@ export class OpenAiTTS implements TTSPort {
       return this.createSilence();
     }
 
+    if (!OPENAI_VOICE_MODEL || !OPENAI_VOICE_NAME) {
+      throw new Error(
+        "OpenAI voice synthesis is disabled (missing OPENAI_VOICE_MODEL or OPENAI_VOICE_NAME)."
+      );
+    }
+
     const openai = getOpenAI();
     const speech = await openai.audio.speech.create({
       model: OPENAI_VOICE_MODEL,
