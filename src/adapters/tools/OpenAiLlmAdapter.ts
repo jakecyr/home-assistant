@@ -76,9 +76,22 @@ export class OpenAiLlmAdapter implements LlmPort {
             function: { name: t.function?.name },
           }));
         }
+        if (m.role === "assistant") {
+          if (typeof m.content === "string" && m.content.length) {
+            copy.preview = m.content.slice(0, 80);
+          } else if (Array.isArray(m.content)) {
+            const textPart = m.content.find((part: any) => typeof part?.text === "string");
+            if (textPart?.text) {
+              copy.preview = textPart.text.slice(0, 80);
+            }
+          }
+        }
         if (m.role === "tool") {
           copy.tool_call_id = m.tool_call_id;
           copy.name = m.name;
+          if (typeof m.content === "string") {
+            copy.preview = m.content.slice(0, 80);
+          }
         }
         if (m.role === "system" || m.role === "user") {
           copy.preview = typeof m.content === "string" ? m.content.slice(0, 80) : typeof m.content;
