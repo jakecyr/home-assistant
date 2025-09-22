@@ -25,7 +25,7 @@ export function buildDeviceContextSummary(
         })
         .join('\n');
       sections.push(
-        `TP-Link devices available:\n${formatted}\nUse these names or aliases when controlling TP-Link plugs or bulbs.`,
+        `TP-Link devices available:\n${formatted}\nIf a user mentions any of the names, aliases, or room descriptors above, treat it as a request targeting the listed device. Use that primary device name when invoking tools.`,
       );
     }
   }
