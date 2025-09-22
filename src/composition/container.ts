@@ -151,9 +151,16 @@ export async function buildApplication(): Promise<ApplicationInstance> {
     continueConversation: shouldContinueConversation,
   });
 
-  const audioAssistant = new VoiceAssistant(bus, audioIn, wakeWord ?? undefined, stt, {
-    startListeningOnLaunch: AUTO_LISTEN || !wakeWord,
-  });
+  const audioAssistant = new VoiceAssistant(
+    bus,
+    audioIn,
+    audioOut,
+    wakeWord ?? undefined,
+    stt,
+    {
+      startListeningOnLaunch: AUTO_LISTEN || !wakeWord,
+    }
+  );
 
   const alarmManager = new AlarmManager(bus, audioOut, time, {
     toneFrequency: 880,
