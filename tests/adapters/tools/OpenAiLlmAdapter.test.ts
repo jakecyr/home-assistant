@@ -37,7 +37,7 @@ describe('OpenAiLlmAdapter', () => {
     expect(typeof result.assistantMessage.content).toBe('string');
   });
 
-  test('throws when response content is empty', async () => {
+  test('gracefully handles empty responses', async () => {
     jest.resetModules();
     jest.doMock('../../../src/openai', () => ({
       getOpenAI: () => ({
@@ -51,8 +51,13 @@ describe('OpenAiLlmAdapter', () => {
       FreshAdapter = require('../../../src/adapters/tools/OpenAiLlmAdapter').OpenAiLlmAdapter;
     });
     const adapter = new FreshAdapter();
-    await expect(
-      adapter.completeStructured([], [], { responseFormat: { name: 'x', schema: {} } })
-    ).rejects.toThrow(/empty/i);
+    const result = await adapter.completeStructured([], [], {
+      responseFormat: { name: 'x', schema: {} },
+    });
+
+    expect(result).toEqual({
+      action: { reply_text: '', expect_user_response: false, tool_calls: [] },
+      assistantMessage: { role: 'assistant', content: '{}' },
+    });
   });
 });
