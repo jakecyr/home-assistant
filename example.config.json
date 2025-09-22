@@ -1,5 +1,5 @@
 {
-  "tools": ["tplink_toggle", "time_now"],
+  "tools": ["tplink_toggle", "timer_beep"],
   "tplink": {
     "devices": {
       "tall_lamp": {
