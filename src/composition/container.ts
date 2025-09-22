@@ -27,6 +27,7 @@ import { Topics } from '../domain/events/EventBus';
 import { ToolOrchestrator } from '../app/ToolOrchestrator';
 import { FunctionToolRegistry, type FunctionTool } from '../adapters/tools/FunctionToolRegistry';
 import { SetTimerTool } from '../features/TimerTools/SetTimerTool';
+import { BeepTimerTool } from '../features/TimerTools/BeepTimerTool';
 import { TimeNowTool } from '../features/TimeTools/TimeNowTool';
 import { WeatherTool } from '../features/WeatherTool';
 import { WebSearchTool } from '../features/WebSearchTool';
@@ -81,6 +82,7 @@ export async function buildApplication(): Promise<ApplicationInstance> {
 
   const defaultToolNames = [
     'timer_set',
+    'timer_beep',
     'time_now',
     'weather_current',
     'tplink_toggle',
@@ -120,6 +122,9 @@ export async function buildApplication(): Promise<ApplicationInstance> {
 
   const timerTool = new SetTimerTool(timerService, time);
   registerTool(timerTool, (args) => timerTool.exec(args));
+
+  const beepTimerTool = new BeepTimerTool(timerService, time);
+  registerTool(beepTimerTool, (args) => beepTimerTool.exec(args));
 
   const timeTool = new TimeNowTool(time);
   registerTool(timeTool, (args) => timeTool.exec(args));
