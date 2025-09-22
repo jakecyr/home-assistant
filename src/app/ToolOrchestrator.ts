@@ -32,6 +32,7 @@ export class ToolOrchestrator {
     const toolDefs = this.tools.list();
     const toolSpecs = buildToolSpecs(toolDefs);
     const validToolNames = new Set(toolDefs.map((t) => t.name));
+    const toolChoice = toolDefs.length ? "auto" : "none";
 
     const resolveToolName = (raw: string): string | null => {
       if (!raw || typeof raw !== "string") return null;
@@ -54,7 +55,7 @@ export class ToolOrchestrator {
 
     const first = await this.llm.completeStructured(workingMessages, toolSpecs, {
       responseFormat: ASSISTANT_ACTION_JSON_SCHEMA,
-      toolChoice: "none",
+      toolChoice,
     });
     workingMessages.push(first.assistantMessage);
     appended.push(first.assistantMessage);
@@ -121,7 +122,7 @@ export class ToolOrchestrator {
 
       const second = await this.llm.completeStructured(workingMessages, toolSpecs, {
         responseFormat: ASSISTANT_ACTION_JSON_SCHEMA,
-        toolChoice: "none",
+        toolChoice,
       });
       workingMessages.push(second.assistantMessage);
       appended.push(second.assistantMessage);

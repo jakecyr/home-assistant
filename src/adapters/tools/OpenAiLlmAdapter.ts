@@ -109,8 +109,43 @@ export class OpenAiLlmAdapter implements LlmPort {
     }
 
     const content = normalizeAssistantMessage(assistantMessage.content);
+    const toolCallsFromMessage = Array.isArray((assistantMessage as any).tool_calls)
+      ? (assistantMessage as any).tool_calls
+      : [];
+
+    if (!content && toolCallsFromMessage.length) {
+      const action = {
+        reply_text: "",
+        expect_user_response: false,
+        tool_calls: toolCallsFromMessage
+          .filter((call: any) => call?.type === "function")
+          .map((call: any) => ({
+            name: call.function?.name ?? "",
+            arguments_json: call.function?.arguments ?? "{}",
+          })),
+      } satisfies AssistantAction;
+
+      return {
+        action,
+        assistantMessage: {
+          role: assistantMessage.role || "assistant",
+          content: JSON.stringify(action),
+        },
+      };
+    }
+
     if (!content) {
-      throw new Error("Assistant response was empty.");
+      return {
+        action: {
+          reply_text: "",
+          expect_user_response: false,
+          tool_calls: [],
+        },
+        assistantMessage: {
+          role: assistantMessage.role || "assistant",
+          content: "{}",
+        },
+      };
     }
 
     const action = parseAssistantAction(content);

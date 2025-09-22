@@ -40,6 +40,7 @@ function candidates(): AudioPlayerCandidate[] {
 export class PlayerAudioOutput implements AudioOutputPort {
   private detected: AudioPlayerCandidate | null | undefined;
   private toneCache = new Map<string, string>();
+  private streamingCapable: boolean | null = null;
 
   async play(filePath: string, options: PlayOptions = {}): Promise<void> {
     const player = this.findPlayer();
@@ -173,6 +174,18 @@ export class PlayerAudioOutput implements AudioOutputPort {
     });
   }
 
+  supportsRealtimeStreaming(): boolean {
+    if (this.streamingCapable === null) {
+      const player = this.findPlayer();
+      if (!player) {
+        this.streamingCapable = false;
+      } else {
+        this.streamingCapable = supportsStreaming(player.command);
+      }
+    }
+    return Boolean(this.streamingCapable);
+  }
+
   private findPlayer(): AudioPlayerCandidate | null {
     if (this.detected !== undefined) return this.detected;
 
@@ -180,6 +193,7 @@ export class PlayerAudioOutput implements AudioOutputPort {
       const probe = spawnSync("which", [candidate.command], { stdio: "ignore" });
       if (probe.status === 0) {
         this.detected = candidate;
+        this.streamingCapable = supportsStreaming(candidate.command);
         console.log(`🔈 Audio player: ${candidate.command}`);
         return candidate;
       }
@@ -189,6 +203,7 @@ export class PlayerAudioOutput implements AudioOutputPort {
       "No audio player found (checked afplay/aplay/paplay/ffplay/play). Audio output disabled."
     );
     this.detected = null;
+    this.streamingCapable = false;
     return null;
   }
 }

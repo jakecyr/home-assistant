@@ -1,4 +1,4 @@
-import type { EventBus } from "../domain/events/EventBus";
+import type { EventBus, Subscription } from "../domain/events/EventBus";
 import { Topics } from "../domain/events/EventBus";
 import type { AudioInputPort } from "../ports/audio/AudioInputPort";
 import type {
@@ -14,6 +14,7 @@ export interface VoiceAssistantOptions {
   wakeWordCooldownMs?: number;
   startListeningOnLaunch?: boolean;
   listeningCue?: ListeningCueOptions;
+  resumeListeningDelayMs?: number;
 }
 
 interface ListeningCueOptions {
@@ -28,6 +29,10 @@ interface ListeningCueConfig {
   stop: ToneOptions;
 }
 
+interface AssistantSpeakingEvent {
+  speaking: boolean;
+}
+
 export class VoiceAssistant {
   private listening = false;
   private lastWakeWord = 0;
@@ -35,8 +40,12 @@ export class VoiceAssistant {
   private streamLogPrinted = false;
   private removeChunkHandler: (() => void) | null = null;
   private removeTranscriptHandler: (() => void) | null = null;
+  private assistantSpeakingSub: Subscription | null = null;
   private cueQueue: Promise<void> = Promise.resolve();
   private readonly listeningCues: ListeningCueConfig;
+  private readonly resumeListeningDelayMs: number;
+  private suspended = false;
+  private resumeTimer: NodeJS.Timeout | null = null;
 
   constructor(
     private readonly bus: EventBus,
@@ -64,6 +73,8 @@ export class VoiceAssistant {
       start: startCue,
       stop: stopCue,
     };
+
+    this.resumeListeningDelayMs = Math.max(0, this.options.resumeListeningDelayMs ?? 250);
   }
 
   async start() {
@@ -73,17 +84,21 @@ export class VoiceAssistant {
     console.log(
       `Voice assistant started (wakeWord=${Boolean(this.wakeWord)}, auto=${this.options.startListeningOnLaunch}).`
     );
-    this.removeChunkHandler?.();
+    this.unhook();
     this.removeChunkHandler = this.audioIn.onChunk((chunk) => this.handleChunk(chunk));
 
-    this.removeTranscriptHandler?.();
     this.removeTranscriptHandler = this.stt.onTranscript((transcript) => {
       const trimmed = transcript.trim();
       if (!trimmed) return;
-      this.disableListening();
+      this.suspendListening();
       console.log(`📝 Transcript: ${trimmed}`);
       this.bus.publish(Topics.UtteranceCaptured, trimmed);
     });
+
+    this.assistantSpeakingSub = this.bus.subscribe<AssistantSpeakingEvent>(
+      Topics.AssistantSpeaking,
+      (event) => this.handleAssistantSpeaking(event)
+    );
 
     if (this.options.startListeningOnLaunch && !this.wakeWord) {
       console.log(
@@ -97,10 +112,9 @@ export class VoiceAssistant {
   async stop() {
     await this.audioIn.stop().catch(() => {});
     await this.stt.stop().catch(() => {});
-    this.removeChunkHandler?.();
-    this.removeTranscriptHandler?.();
-    this.removeChunkHandler = null;
-    this.removeTranscriptHandler = null;
+    this.unhook();
+    this.clearResumeTimer();
+    this.suspended = false;
   }
 
   private handleChunk(chunk: Buffer) {
@@ -119,10 +133,17 @@ export class VoiceAssistant {
         const rms = this.calculateRms(chunk);
         console.log(`Auto-listen RMS ≈ ${rms.toFixed(2)}`);
       }
+      if (this.suspended) {
+        return;
+      }
       if (!this.listening) {
         this.enableListening('auto-listen');
       }
       this.stt.sendPcm(chunk);
+      return;
+    }
+
+    if (this.suspended) {
       return;
     }
 
@@ -143,7 +164,7 @@ export class VoiceAssistant {
   }
 
   private enableListening(trigger: 'wake-word' | 'auto-listen') {
-    if (this.listening) return;
+    if (this.listening || this.suspended) return;
     this.listening = true;
     this.lastWakeWord = Date.now();
     console.log(
@@ -197,5 +218,56 @@ export class VoiceAssistant {
     } catch (err) {
       console.warn(`Failed to play listening ${kind} cue:`, err);
     }
+  }
+
+  private handleAssistantSpeaking(event: AssistantSpeakingEvent) {
+    if (event.speaking) {
+      this.suspendListening();
+      return;
+    }
+
+    this.scheduleResume();
+  }
+
+  private suspendListening() {
+    this.suspended = true;
+    this.clearResumeTimer();
+    this.disableListening();
+  }
+
+  private scheduleResume() {
+    this.clearResumeTimer();
+    const delay = this.resumeListeningDelayMs;
+    const resume = () => {
+      this.resumeTimer = null;
+      this.suspended = false;
+      if (!this.wakeWord) {
+        this.enableListening('auto-listen');
+      }
+    };
+    if (delay === 0) {
+      resume();
+      return;
+    }
+    this.resumeTimer = setTimeout(resume, delay);
+    if (typeof this.resumeTimer.unref === 'function') {
+      this.resumeTimer.unref();
+    }
+  }
+
+  private clearResumeTimer() {
+    if (this.resumeTimer) {
+      clearTimeout(this.resumeTimer);
+      this.resumeTimer = null;
+    }
+  }
+
+  private unhook() {
+    this.removeChunkHandler?.();
+    this.removeTranscriptHandler?.();
+    this.assistantSpeakingSub?.unsubscribe();
+    this.removeChunkHandler = null;
+    this.removeTranscriptHandler = null;
+    this.assistantSpeakingSub = null;
   }
 }

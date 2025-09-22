@@ -19,4 +19,5 @@ export interface AudioOutputPort {
     stream: AsyncIterable<Buffer>,
     options: PlayStreamOptions
   ): Promise<void>;
+  supportsRealtimeStreaming?(): boolean;
 }

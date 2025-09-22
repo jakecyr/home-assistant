@@ -60,7 +60,12 @@ export class ConversationLoop {
     }
     const action = result.action;
 
-    await this.speech.render(action);
+    this.bus.publish(Topics.AssistantSpeaking, { speaking: true });
+    try {
+      await this.speech.render(action);
+    } finally {
+      this.bus.publish(Topics.AssistantSpeaking, { speaking: false });
+    }
 
     const shouldContinue = this.shouldContinue(action);
     this.stateMachine.onReplyDone(shouldContinue);
@@ -69,13 +74,12 @@ export class ConversationLoop {
   private trimmedHistory(): LlmMessage[] {
     const max = this.options.maxHistoryMessages ?? 12;
     const slice = this.history.slice(-max);
-    return slice.map((msg) => ({ ...msg }));
+    return slice.map(cloneMessage);
   }
 
   private appendToHistory(messages: LlmMessage[]) {
     for (const msg of messages) {
-      if (msg.role === "tool") continue;
-      this.history.push({ ...msg });
+      this.history.push(cloneMessage(msg));
     }
   }
 
@@ -88,4 +92,18 @@ export class ConversationLoop {
     }
     return false;
   }
+}
+
+function cloneMessage(msg: LlmMessage): LlmMessage {
+  const copy: any = { ...msg };
+  if (Array.isArray(msg.content)) {
+    copy.content = msg.content.map((part) => ({ ...part }));
+  }
+  if ((copy as any).tool_calls) {
+    copy.tool_calls = (copy.tool_calls as any[]).map((call) => ({
+      ...call,
+      function: call?.function ? { ...call.function } : undefined,
+    }));
+  }
+  return copy;
 }

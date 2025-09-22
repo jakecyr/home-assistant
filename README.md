@@ -1,106 +1,96 @@
 # Home Assistant
 
-## Overview
+A voice-controlled assistant that responds to the wake word "Jarvis" and can control smart home devices, answer questions, and more.
 
-This project is a TypeScript/Node.js voice assistant designed to run on a Raspberry Pi. It waits for the Porcupine wake word "Jarvis", streams microphone audio to AssemblyAI for transcription, and then lets an OpenAI model reason about the transcript and call local tools (for example, placeholder lighting controls in `src/tools`). When the model replies, the response is rendered to speech via OpenAI's TTS API and played through a locally available audio player. The default agent loop can call multiple tools per conversation turn and falls back to a direct response if no tools are needed.
+## Key Features
 
-### What the runtime does
+- 🎤 Wake word detection with Porcupine
+- 🗣️ Speech-to-text using AssemblyAI
+- 🧠 Powered by OpenAI's language models
+- 🎵 Text-to-speech response
+- 🔌 Control smart home devices (TP-Link Kasa)
+- ⏰ Check time and weather
+- 🌐 Web search capabilities
+- 🔄 Follow-up conversation support
 
-- **Wake word detection:** `@picovoice/porcupine-node` listens for "Jarvis" while the assistant is idle.
-- **Streaming speech-to-text:** `@picovoice/pvrecorder-node` captures PCM16 audio and ships 50 ms chunks to AssemblyAI's real-time streaming SDK, tuned to wait up to 10 s for speech with a 2 s end-of-turn silence window.
-- **LLM reasoning and tool use:** The transcript is sent to OpenAI's Responses API (chat completions-compatible) where the model may call functions defined under `src/tools` before replying to the user.
-- **Speech synthesis:** OpenAI's `gpt-4o-mini-tts` converts the model's final text into an in-memory WAV file which is played via `afplay`/`aplay`/`paplay`/`ffplay`/`play`, depending on the host platform.
-- **Auditory cues:** Short earcons play when the assistant starts or stops listening so you always know when to speak.
-- **Utterance handling:** If AssemblyAI returns an empty transcript the assistant apologises, keeps listening once more without the wake word, and only falls back to IDLE after a second miss. Background chatter is down-weighted via the system prompt so the agent stays quiet unless addressed.
-- **Follow-up context:** After responding, the assistant immediately listens for a reply without requiring the wake word again, and it maintains a rolling history of recent exchanges (about six turns) so follow-up questions have context even after subsequent wake words.
-- **Pluggable tools:** Tool metadata is converted to OpenAI function specs and executed inside `runAgentWithTools`, so you can expand the assistant by adding new files next to `lights.on.ts` and `lights.off.ts`.
-- **Device & data integrations:** Built-in tools can toggle TP-Link Kasa plugs, fetch the weather, report the time/date, and run live web searches (via SerpAPI).
-  - Tools are opt-in; add their names to the config `tools` array before they are exposed to the model.
+## 🚀 Quick Start
 
-## Prerequisites
+### Prerequisites
+- Node.js 20 LTS or later
+- Microphone and speakers/headphones
+- API keys for [Picovoice](https://console.picovoice.ai/), [AssemblyAI](https://www.assemblyai.com/), and [OpenAI](https://platform.openai.com/)
 
-- **Node.js 20 LTS** (18+ should work, but 20 is recommended for better TLS/websocket defaults).
-- **npm 9+** (ships with Node.js 20).
-- **Microphone and speakers/headphones** connected to the machine running the assistant.
-- **API keys** for Picovoice, AssemblyAI, and OpenAI (see [API keys](#api-keys)).
+### Installation
 
-## Quick start
+```bash
+# Clone the repository
+git clone <repository-url>
+cd assistant
 
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
-2. Copy the sample environment file and fill in your secrets:
-   ```bash
-   cp env.example .env
-   ```
-3. Edit `.env` to set `PICOVOICE_ACCESS_KEY`, `ASSEMBLYAI_API_KEY`, `OPENAI_API_KEY`, and optionally tweak other variables (see below).
-4. Compile the TypeScript sources (rerun after code changes):
-   ```bash
-   npm run build
-   ```
-5. Start the assistant:
+# Install dependencies
+npm install
 
-   ```bash
-   npm start
-   ```
+# Set up environment
+cp env.example .env
+# Edit .env with your API keys
 
-   The process prints `Jarvis on Pi starting…` and waits for you to say "Jarvis". Say the wake word and speak a request to exercise the end-to-end loop. If a supported command-line audio player is available, the reply is spoken aloud; otherwise you'll see a console warning reminding you to install one.
+# Build the project
+npm run build
 
-   - To keep the assistant running and restart on crashes, launch `scripts/run.sh` instead of `npm start`.
-   - Pass a custom config file (see below) by appending `-- --config path/to/config.json`, e.g. `npm start -- --config config.json`.
-   - Capture a persistent log by providing `-- --log-file logs/jarvis.log` (the runner forwards flags the same way: `./scripts/run.sh --config config.json --log-file logs/jarvis.log`).
-   - Skip the wake word during local testing with `npm start -- --auto-listen` (or set `AUTO_LISTEN=true` in `.env`), so the assistant begins listening immediately.
+# Start the assistant
+npm start
+```
 
-6. Run tests (optional but recommended when developing tools):
-   ```bash
-   npm test
-   ```
+### Running the Assistant
 
-### Listing audio devices
+1. The assistant will start and wait for the wake word "Jarvis"
+2. Speak your command after hearing the activation sound
+3. The assistant will process your request and respond
 
-After `npm install`, you can enumerate device labels that `PvRecorder` sees:
+#### Useful Commands
+- `npm start` - Start the assistant
+- `npm test` - Run tests
+- `npm run build` - Rebuild after making changes
+- `./scripts/run.sh` - Run with auto-restart on crashes
 
+#### Configuration
+Customize the assistant by creating a `config.json` file. See the example below for available options.
+
+## 🎙️ Audio Setup
+
+To list available audio devices:
 ```bash
 node scripts/list-audio-devices.js
 ```
 
-Set `AUDIO_DEVICE` in `.env` to one of the printed indexes or to a substring of the desired label. Leave it as `default` to let PortAudio choose.
+Set `AUDIO_DEVICE` in `.env` to the desired device index or name.
 
-## Environment variables
+## ⚙️ Configuration
 
-All configuration lives in `.env` and is loaded via `dotenv` when the process starts.
+### Environment Variables
 
-| Variable               | Required | Description                                                                             | Default       |
-| ---------------------- | -------- | --------------------------------------------------------------------------------------- | ------------- |
-| `PICOVOICE_ACCESS_KEY` | ✅       | Porcupine access key used for offline wake-word detection.                              | –             |
-| `ASSEMBLYAI_API_KEY`   | ✅       | API key for AssemblyAI's streaming transcription service.                               | –             |
-| `OPENAI_API_KEY`       | ✅       | API key for the OpenAI Responses API.                                                   | –             |
-| `AUDIO_DEVICE`         | ⬜️      | Microphone identifier (`default`, a numeric index, or a substring of the device label). | `default`     |
-| `OPENAI_MODEL`         | ⬜️      | Chat/completions model ID to use for tool calls.                                        | `gpt-4o-mini` |
-| `SERPAPI_KEY`          | ⬜️      | SerpAPI key to enable the `web_search` tool.                                            | –             |
-| `ALLOW_SHELL`          | ⬜️      | Reserved for optional shell tooling—leave `false` unless you add such a tool yourself.  | `false`       |
+| Variable               | Required | Description                         | Default       |
+|------------------------|----------|-------------------------------------|---------------|
+| `PICOVOICE_ACCESS_KEY` | ✅       | For wake-word detection             | –             |
+| `ASSEMBLYAI_API_KEY`   | ✅       | For speech-to-text                  | –             |
+| `OPENAI_API_KEY`       | ✅       | For language model and text-to-speech | –             |
+| `AUDIO_DEVICE`         | ⬜️      | Microphone device identifier        | `default`     |
+| `OPENAI_MODEL`         | ⬜️      | OpenAI model to use                 | `gpt-4o-mini` |
+| `SERPAPI_KEY`          | ⬜️      | Required for web search             | –             |
 
-### Optional config file
+### Config File
 
-You can provide persistent device mappings and weather defaults via `config.json` (or `assistant.config.json`) in the project root. Point to another path with `npm start -- --config /path/to/config.json` or `./scripts/run.sh --config /path/to/config.json`.
-
-The optional `tools` array controls which integrations are enabled. Leaving it empty disables tool calling entirely (useful when you just want conversation without incurring extra API tokens).
+Create a `config.json` file to customize device mappings and enable features:
 
 ```json
 {
-  "tools": ["tplink_toggle", "time_now"],
+  "tools": ["tplink_toggle", "time_now", "weather_current", "web_search"],
   "tplink": {
     "devices": {
       "living_room_plug": {
         "ip": "192.168.1.42",
         "room": "living room",
-        "aliases": ["couch plug", "sofa outlet"]
-      },
-      "desk_lamp": {
-        "ip": "192.168.1.43",
-        "room": "office",
-        "aliases": ["desk light"]
+        "aliases": ["couch plug"]
       }
     }
   },
@@ -113,92 +103,46 @@ The optional `tools` array controls which integrations are enabled. Leaving it e
 }
 ```
 
-Device tools accept either the friendly name or a raw IP address. Update the JSON whenever a bulb or plug changes networks.
+#### Auto-Discovery
 
-Each device entry can include:
-
-- `ip` (required): the device IP address.
-- `room` (optional): used so commands like “turn off the living room lights” target every device in that room.
-- `aliases` (optional): extra phrases that should map to that device (e.g., “floor lamp”).
-
-With `room` and `aliases` defined, Jarvis can respond to phrases like “turn off the tall lamp” or “switch off all living room lights” without extra prompt engineering.
-
-Supported tool names:
-
-- `tplink_toggle`
-- `weather_current`
-- `time_now`
-- `web_search`
-
-If the `tools` array is omitted or left empty, no tools are enabled (the assistant will only respond conversationally).
-
-#### Discovering devices automatically
-
-Use the helper scripts to discover and optionally merge devices into your config file:
-
+Discover TP-Link devices automatically:
 ```bash
-# Scan for TP-Link Kasa plugs and write them into config.json
 node scripts/scan-tplink.js --write
-
-# Specify a custom config path and overwrite existing entries if needed
-node scripts/scan-tplink.js --config ./my-config.json --write --force
-
-# Detect your approximate coordinates via IP and store them
 node scripts/setup-weather.js --write
 ```
 
-Each script prints the devices it finds (alias, IP, model) and, when `--write` is supplied, merges new entries into the `tplink.devices` section.
 
-When you're ready to run with a specific config file, start the assistant like:
+2. **AssemblyAI**
+   - Get a key from [AssemblyAI](https://www.assemblyai.com/)
+   - Set as `ASSEMBLYAI_API_KEY`
+
+3. **OpenAI**
+   - Get a key from [OpenAI](https://platform.openai.com/account/api-keys)
+   - Set as `OPENAI_API_KEY`
+
+## 🖥️ Platform Setup
+
+### Raspberry Pi (Recommended)
 
 ```bash
-./scripts/run.sh --config ./config.json
-# or use one of the sample files, e.g.
-./scripts/run.sh --config ./example.config.json
+# Install dependencies
+sudo apt update
+sudo apt install -y git build-essential python3 make g++ alsa-utils
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# Follow the Quick Start instructions above
 ```
 
-## API keys
-
-- **Picovoice Porcupine:** Create a free Picovoice Console account and generate a new Porcupine AccessKey at <https://console.picovoice.ai/>. Paste the key into `PICOVOICE_ACCESS_KEY`.
-- **AssemblyAI:** Sign in to the AssemblyAI dashboard at <https://www.assemblyai.com/dashboard>, create a project (if needed), and copy your real-time API token into `ASSEMBLYAI_API_KEY`.
-- **OpenAI:** Visit <https://platform.openai.com/account/api-keys>, create a new secret key, and set `OPENAI_API_KEY`. Choose a model compatible with tool calling (for example, `gpt-4o-mini`) via `OPENAI_MODEL`.
-
-## Development testing
-
 ### macOS
+1. Install Node.js 20: `brew install node@20`
+2. Grant microphone access in System Settings → Privacy & Security → Microphone
+3. Follow the Quick Start instructions
 
-1. Install Node.js 20 (e.g., `brew install node@20`) and ensure your terminal app has microphone permission under **System Settings → Privacy & Security → Microphone**.
-2. Follow the [quick start](#quick-start) steps to install packages, configure `.env`, and build the project.
-3. Use the [device listing command](#listing-audio-devices) to find the built-in or USB microphone and set `AUDIO_DEVICE` if the default input is not correct.
-4. Run `npm start` from the project root. The first launch will trigger a macOS permission prompt—accept it so the assistant can capture audio.
-5. Say "Jarvis" and issue a test request (e.g., "turn on the living room lights"). Watch the console logs to confirm tool calls and responses.
-
-### Windows 11 / 10
-
-1. Install the latest Node.js 20 LTS build from <https://nodejs.org/> and restart PowerShell or Command Prompt so the `node` and `npm` commands are available.
-2. Execute the [quick start](#quick-start) steps (PowerShell users can run `cp env.example .env` or `Copy-Item env.example .env`).
-3. Run the [device listing command](#listing-audio-devices) in the same shell to find your USB microphone or headset name/index and set `AUDIO_DEVICE` in `.env` as needed.
-4. Start the assistant with `npm start`. Windows will display a microphone access consent dialog the first time; click **Allow**.
-5. Speak the wake word followed by a request. You should see `[tool]` logs when the assistant invokes `lights_on`/`lights_off` or any tools you add, and the spoken response should play through the detected audio device.
-
-## Running on Raspberry Pi
-
-The assistant is optimized for a Raspberry Pi 4/5 (64-bit Raspberry Pi OS) with a USB microphone.
-
-1. **Prepare the OS and dependencies**
-   ```bash
-   sudo apt update
-   sudo apt install -y git build-essential python3 make g++ alsa-utils
-   curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-   sudo apt install -y nodejs
-   ```
-2. **Clone and install**
-   ```bash
-   git clone <repository-url>
-   cd assistant
-   npm install
-   cp env.example .env
-   ```
+### Windows
+1. Install Node.js 20 from [nodejs.org](https://nodejs.org/)
+2. Run PowerShell as Administrator and execute the Quick Start steps
+3. Allow microphone access when prompted
 3. **Configure audio**
    - Run `arecord -l` to verify the microphone shows up. Note the card/device numbers.
    - Use the [device listing command](#listing-audio-devices) or set `AUDIO_DEVICE` to the matching index/label in `.env` (leave as `default` if ALSA default is correct).

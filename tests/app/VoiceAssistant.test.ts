@@ -59,10 +59,10 @@ describe('VoiceAssistant', () => {
 
     const va = new VoiceAssistant(bus as any, audioIn as any, audioOut as any, undefined, stt as any, {
       startListeningOnLaunch: true,
+      resumeListeningDelayMs: 0,
     });
 
-    await va.start();
-    await flushAsync();
+    await va.start(); await flushAsync();
 
     // Auto-listen should have published a wake-like event to kick off
     expect(wakeEvent).toHaveBeenCalled();
@@ -79,8 +79,7 @@ describe('VoiceAssistant', () => {
     const utterHandler = jest.fn();
     bus.subscribe(Topics.UtteranceCaptured, utterHandler);
 
-    stt.emitTranscript('  hello  ');
-    await flushAsync();
+    stt.emitTranscript('  hello  '); await flushAsync();
 
     expect(utterHandler).toHaveBeenCalledWith('hello');
     expect(audioOut.prepareTone).toHaveBeenCalledWith('listen-stop', expect.any(Object));
@@ -108,6 +107,7 @@ describe('VoiceAssistant', () => {
       stt as any,
       {
         wakeWordCooldownMs: 1000,
+        resumeListeningDelayMs: 0,
       }
     );
 
@@ -115,8 +115,7 @@ describe('VoiceAssistant', () => {
 
     // First non-listening chunk should be evaluated by wake word and trigger enableListening
     const chunk1 = Buffer.from([0, 0, 1, 0]); // 2 samples
-    audioIn.emit(chunk1);
-    await flushAsync();
+    audioIn.emit(chunk1); await flushAsync();
 
     expect(wakeWord.processPcm).toHaveBeenCalled();
     expect(wakeEvent).toHaveBeenCalled();
@@ -128,4 +127,5 @@ describe('VoiceAssistant', () => {
 
     expect(stt.sendPcm).toHaveBeenCalledWith(chunk2);
   });
+
 });

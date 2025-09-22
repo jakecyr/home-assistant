@@ -12,6 +12,7 @@ export interface SpeechRendererOptions {
 export class SpeechRenderer {
   private readonly sampleRate: number;
   private readonly voiceEnabled: boolean;
+  private realtimeStreamingAvailable = true;
 
   constructor(
     private readonly audioOut: AudioOutputPort,
@@ -32,7 +33,16 @@ export class SpeechRenderer {
       return;
     }
 
-    if (typeof this.audioOut.playStream === "function") {
+    const streamingSupported =
+      typeof this.audioOut.supportsRealtimeStreaming === "function"
+        ? this.audioOut.supportsRealtimeStreaming()
+        : true;
+
+    if (
+      this.realtimeStreamingAvailable &&
+      typeof this.audioOut.playStream === "function" &&
+      streamingSupported
+    ) {
       try {
         const stream = await this.realtimeTts.stream(text);
         await this.audioOut.playStream(stream, {
@@ -41,6 +51,9 @@ export class SpeechRenderer {
         return;
       } catch (err) {
         console.warn("Realtime TTS failed; falling back to file playback:", err);
+        if (err instanceof Error && /does not support streamed playback/i.test(err.message)) {
+          this.realtimeStreamingAvailable = false;
+        }
       }
     }
 

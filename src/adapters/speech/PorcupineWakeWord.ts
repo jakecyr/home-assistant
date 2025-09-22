@@ -17,7 +17,7 @@ export class PorcupineWakeWord implements WakeWordPort {
     this.porcupine = new Porcupine(
       options.accessKey,
       [options.keyword],
-      [options.sensitivity ?? 0.4],
+      [options.sensitivity ?? 0.6],
     );
   }
 
