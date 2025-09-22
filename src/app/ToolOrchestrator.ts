@@ -31,6 +31,23 @@ export class ToolOrchestrator {
   }> {
     const toolDefs = this.tools.list();
     const toolSpecs = buildToolSpecs(toolDefs);
+    const validToolNames = new Set(toolDefs.map((t) => t.name));
+
+    const resolveToolName = (raw: string): string | null => {
+      if (!raw || typeof raw !== "string") return null;
+      const candidates = new Set<string>();
+      const trimmed = raw.trim();
+      candidates.add(trimmed);
+      candidates.add(trimmed.toLowerCase());
+      candidates.add(trimmed.replace(/[ .]/g, "_"));
+      candidates.add(trimmed.replace(/[ .]/g, "_").toLowerCase());
+      candidates.add(trimmed.replace(/[^a-zA-Z0-9_-]/g, "_"));
+      candidates.add(trimmed.replace(/[^a-zA-Z0-9_-]/g, "_").toLowerCase());
+      for (const c of candidates) {
+        if (validToolNames.has(c)) return c;
+      }
+      return null;
+    };
 
     const workingMessages = [...messages];
     const appended: LlmMessage[] = [];
@@ -54,17 +71,48 @@ export class ToolOrchestrator {
         if (typeof call.arguments_json !== "string") {
           throw new Error(`Tool call ${call.name} missing arguments_json string.`);
         }
-        (call as any).__id = `${call.name}-${index}`;
+        const resolved = resolveToolName(call.name);
+        if (!resolved) {
+          throw new Error(
+            `Unknown or invalid tool name "${call.name}". Known tools: ${Array.from(validToolNames).join(
+              ", "
+            )}`,
+          );
+        }
+        (call as any).__resolved_name = resolved;
+        (call as any).__id = `${resolved}-${index}`;
       });
+
+      // Insert an assistant message that declares tool_calls before any 'tool' messages
+      // so that the OpenAI API properly associates tool responses.
+      const assistantToolCallsMessage: LlmMessage = {
+        role: "assistant",
+        content: "",
+        tool_calls: action.tool_calls.map((call) => ({
+          id: (call as any).__id as string,
+          type: "function" as const,
+          function: {
+            name: ((call as any).__resolved_name as string) || (call.name as string),
+            arguments: call.arguments_json as string,
+          },
+        })),
+      };
+      workingMessages.push(assistantToolCallsMessage);
+      appended.push(assistantToolCallsMessage);
+      console.log(
+        "🔧 Declared assistant tool_calls:",
+        JSON.stringify(assistantToolCallsMessage.tool_calls?.map((t) => t.function.name))
+      );
 
       for (const call of action.tool_calls) {
         const callId = (call as any).__id as string;
-        const args = this.parseArguments(call.arguments_json, call.name);
-        const result = await this.invokeTool(call.name, args);
+        const resolvedName = ((call as any).__resolved_name as string) || call.name;
+        const args = this.parseArguments(call.arguments_json, resolvedName);
+        const result = await this.invokeTool(resolvedName, args);
         const toolMessage: LlmMessage = {
           role: "tool",
           tool_call_id: callId,
-          name: call.name,
+          name: resolvedName,
           content: JSON.stringify(result),
         };
         workingMessages.push(toolMessage);

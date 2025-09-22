@@ -18,6 +18,11 @@ function toChatMessage(msg: LlmMessage): ChatCompletionMessageParam {
   if (msg.role === "tool" && msg.tool_call_id) {
     (base as any).tool_call_id = msg.tool_call_id;
   }
+  if (msg.role === "assistant" && Array.isArray((msg as any).tool_calls)) {
+    // Pass through assistant tool_calls so that any following 'tool' messages
+    // are properly associated per OpenAI API contract.
+    (base as any).tool_calls = (msg as any).tool_calls;
+  }
   if (msg.role === "assistant" && Array.isArray(msg.content)) {
     base.content = msg.content as any;
   }
@@ -61,6 +66,27 @@ export class OpenAiLlmAdapter implements LlmPort {
   ): Promise<StructuredCompletion> {
     const client = getOpenAI();
     const requestMessages = messages.map(toChatMessage);
+
+    try {
+      const debug = requestMessages.map((m: any) => {
+        const copy: any = { role: m.role };
+        if (m.role === "assistant" && Array.isArray(m.tool_calls)) {
+          copy.tool_calls = m.tool_calls.map((t: any) => ({
+            id: t.id,
+            function: { name: t.function?.name },
+          }));
+        }
+        if (m.role === "tool") {
+          copy.tool_call_id = m.tool_call_id;
+          copy.name = m.name;
+        }
+        if (m.role === "system" || m.role === "user") {
+          copy.preview = typeof m.content === "string" ? m.content.slice(0, 80) : typeof m.content;
+        }
+        return copy;
+      });
+      console.log("📤 OpenAI request messages:", JSON.stringify(debug));
+    } catch {}
 
     const resp = await client.chat.completions.create({
       model: OPENAI_TEXT_MODEL,

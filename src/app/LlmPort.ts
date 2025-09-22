@@ -7,6 +7,17 @@ export interface LlmMessage {
   content: any;
   tool_call_id?: string;
   name?: string;
+  // When role === "assistant", OpenAI expects tool call metadata to precede any
+  // subsequent messages with role "tool". We include this optional field so the
+  // orchestrator can synthesize an assistant message that declares tool calls.
+  tool_calls?: Array<{
+    id: string;
+    type: "function";
+    function: {
+      name: string;
+      arguments: string;
+    };
+  }>;
 }
 
 export interface LlmToolCall {
