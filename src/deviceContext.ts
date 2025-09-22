@@ -7,13 +7,27 @@ export function buildDeviceContextSummary(
   const sections: string[] = [];
   const enabled = new Set(enabledTools);
 
-  const tplinkDevices = Object.keys(config.tplink?.devices ?? {});
-  if (tplinkDevices.length && enabled.has('tplink_toggle')) {
-    sections.push(
-      `TP-Link devices available: ${tplinkDevices
-        .map((name) => `"${name}"`)
-        .join(', ')}. Use these names when controlling TP-Link plugs or bulbs.`,
-    );
+  if (enabled.has('tplink_toggle')) {
+    const descriptors = buildDeviceDescriptors(config, enabledTools);
+    if (descriptors.length) {
+      const formatted = descriptors
+        .map((device) => {
+          const details: string[] = [];
+          if (device.room) details.push(`room: ${device.room}`);
+          if (device.aliases.length) {
+            const aliasList = device.aliases.map((alias) => `"${alias}"`).join(', ');
+            details.push(`aliases: ${aliasList}`);
+          }
+          if (details.length) {
+            return `- ${device.name} (${details.join('; ')})`;
+          }
+          return `- ${device.name}`;
+        })
+        .join('\n');
+      sections.push(
+        `TP-Link devices available:\n${formatted}\nUse these names or aliases when controlling TP-Link plugs or bulbs.`,
+      );
+    }
   }
 
   if (!sections.length) return null;

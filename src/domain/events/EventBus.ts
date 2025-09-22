@@ -12,4 +12,5 @@ export const Topics = {
   WakeWordDetected: "wakeword.detected",
   UtteranceCaptured: "stt.utterance",
   AssistantSpeaking: "assistant.speaking",
+  AssistantExpectingReply: "assistant.expecting_reply",
 } as const;

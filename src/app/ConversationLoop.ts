@@ -68,6 +68,7 @@ export class ConversationLoop {
     }
 
     const shouldContinue = this.shouldContinue(action);
+    this.bus.publish(Topics.AssistantExpectingReply, { expecting: shouldContinue });
     this.stateMachine.onReplyDone(shouldContinue);
   }
 

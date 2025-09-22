@@ -33,6 +33,10 @@ interface AssistantSpeakingEvent {
   speaking: boolean;
 }
 
+interface AssistantExpectingReplyEvent {
+  expecting: boolean;
+}
+
 export class VoiceAssistant {
   private listening = false;
   private lastWakeWord = 0;
@@ -41,6 +45,7 @@ export class VoiceAssistant {
   private removeChunkHandler: (() => void) | null = null;
   private removeTranscriptHandler: (() => void) | null = null;
   private assistantSpeakingSub: Subscription | null = null;
+  private expectingReplySub: Subscription | null = null;
   private cueQueue: Promise<void> = Promise.resolve();
   private readonly listeningCues: ListeningCueConfig;
   private readonly resumeListeningDelayMs: number;
@@ -98,6 +103,11 @@ export class VoiceAssistant {
     this.assistantSpeakingSub = this.bus.subscribe<AssistantSpeakingEvent>(
       Topics.AssistantSpeaking,
       (event) => this.handleAssistantSpeaking(event)
+    );
+
+    this.expectingReplySub = this.bus.subscribe<AssistantExpectingReplyEvent>(
+      Topics.AssistantExpectingReply,
+      (event) => this.handleAssistantExpectingReply(event)
     );
 
     if (this.options.startListeningOnLaunch && !this.wakeWord) {
@@ -163,16 +173,19 @@ export class VoiceAssistant {
     this.stt.sendPcm(chunk);
   }
 
-  private enableListening(trigger: 'wake-word' | 'auto-listen') {
+  private enableListening(trigger: 'wake-word' | 'auto-listen' | 'follow-up') {
     if (this.listening || this.suspended) return;
     this.listening = true;
     this.lastWakeWord = Date.now();
-    console.log(
-      trigger === 'auto-listen'
-        ? '🎤 Auto-listen engaged — streaming audio to STT.'
-        : '🔔 Wake word detected — listening for command.'
-    );
-    this.bus.publish(Topics.WakeWordDetected, { trigger });
+    if (trigger === 'auto-listen') {
+      console.log('🎤 Auto-listen engaged — streaming audio to STT.');
+      this.bus.publish(Topics.WakeWordDetected, { trigger });
+    } else if (trigger === 'wake-word') {
+      console.log('🔔 Wake word detected — listening for command.');
+      this.bus.publish(Topics.WakeWordDetected, { trigger });
+    } else {
+      console.log('👂 Ready for follow-up — listening now.');
+    }
     this.scheduleCue('start');
   }
 
@@ -229,6 +242,11 @@ export class VoiceAssistant {
     this.scheduleResume();
   }
 
+  private handleAssistantExpectingReply(event: AssistantExpectingReplyEvent) {
+    if (!event.expecting) return;
+    this.resumeForFollowUp();
+  }
+
   private suspendListening() {
     this.suspended = true;
     this.clearResumeTimer();
@@ -262,12 +280,22 @@ export class VoiceAssistant {
     }
   }
 
+  private resumeForFollowUp() {
+    this.clearResumeTimer();
+    this.suspended = false;
+    if (this.listening) return;
+    this.enableListening(this.wakeWord ? 'follow-up' : 'auto-listen');
+    this.stt.sendPcm(Buffer.alloc(0));
+  }
+
   private unhook() {
     this.removeChunkHandler?.();
     this.removeTranscriptHandler?.();
     this.assistantSpeakingSub?.unsubscribe();
+    this.expectingReplySub?.unsubscribe();
     this.removeChunkHandler = null;
     this.removeTranscriptHandler = null;
     this.assistantSpeakingSub = null;
+    this.expectingReplySub = null;
   }
 }

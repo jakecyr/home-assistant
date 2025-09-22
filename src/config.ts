@@ -67,6 +67,17 @@ export function resolveDevice(
   if (!nameOrIp) return null;
   if (devices && devices[nameOrIp]) return devices[nameOrIp];
   if (/^\d+\.\d+\.\d+\.\d+$/.test(nameOrIp)) return { ip: nameOrIp };
+
+  const normalized = normalizeKey(nameOrIp);
+  if (!devices || !normalized) return null;
+
+  for (const [name, entry] of Object.entries(devices)) {
+    const candidates = buildLookupKeys(name, entry);
+    if (candidates.has(normalized)) {
+      return entry;
+    }
+  }
+
   return null;
 }
 
@@ -103,4 +114,48 @@ function normalizeDevices(
   }
 
   return out;
+}
+
+function normalizeKey(value: string): string | null {
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) return null;
+  return trimmed.replace(/\s+/g, " ");
+}
+
+function humanizeName(name: string): string {
+  return name
+    .replace(/[_-]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function buildLookupKeys(name: string, entry: DeviceEntry): Set<string> {
+  const keys = new Set<string>();
+  const push = (value: string | undefined | null) => {
+    if (!value) return;
+    const normalized = normalizeKey(value);
+    if (normalized) keys.add(normalized);
+  };
+
+  push(name);
+  push(humanizeName(name));
+
+  if (Array.isArray(entry.aliases)) {
+    for (const alias of entry.aliases) {
+      push(alias);
+      push(humanizeName(alias));
+    }
+  }
+
+  if (entry.room) {
+    const room = entry.room;
+    push(room);
+    push(`${room} ${humanizeName(name)}`);
+    push(`${room} ${name}`);
+    push(`all ${room}`);
+  }
+
+  return keys;
 }
