@@ -16,6 +16,7 @@ import { PorcupineWakeWord } from '../adapters/speech/PorcupineWakeWord';
 import { AssemblyAiSTT } from '../adapters/speech/AssemblyAiSTT';
 import { OpenAiTTS } from '../adapters/speech/OpenAiTTS';
 import { OpenAIRealtimeTTS } from '../adapters/speech/OpenAIRealtimeTTS';
+import { SystemTTS } from '../adapters/speech/SystemTTS';
 import { NodeTimerService } from '../adapters/sys/NodeTimerService';
 import { AlarmManager } from '../app/AlarmManager';
 import { OpenAiLlmAdapter } from '../adapters/tools/OpenAiLlmAdapter';
@@ -76,8 +77,33 @@ export async function buildApplication(): Promise<ApplicationInstance> {
     frameLength,
   });
   const stt = new AssemblyAiSTT({ apiKey: ASSEMBLYAI_API_KEY });
-  const tts = new OpenAiTTS();
+  const speechPrefs = appConfig.speech ?? {};
+  const requestedSpeechEngine = speechPrefs.engine ?? 'openai';
+
   const realtimeTts = new OpenAIRealtimeTTS();
+  let fallbackTts: OpenAiTTS | SystemTTS | null = null;
+  let allowRealtimeStreaming = true;
+  let voiceEnabled: boolean | undefined;
+  let usingOpenAiVoices = requestedSpeechEngine !== 'system';
+
+  if (requestedSpeechEngine === 'system') {
+    if (!SystemTTS.isSupported()) {
+      console.warn(
+        'System speech engine requested but not supported on this platform; falling back to OpenAI voices.',
+      );
+      usingOpenAiVoices = true;
+    } else {
+      fallbackTts = new SystemTTS({ voice: speechPrefs.voice });
+      allowRealtimeStreaming = false;
+      voiceEnabled = true;
+    }
+  }
+
+  if (!fallbackTts || usingOpenAiVoices) {
+    fallbackTts = new OpenAiTTS();
+    voiceEnabled = Boolean(OPENAI_VOICE_MODEL && OPENAI_VOICE_NAME);
+    allowRealtimeStreaming = true;
+  }
   const timerService = new NodeTimerService();
 
   const defaultToolNames = [
@@ -148,9 +174,9 @@ export async function buildApplication(): Promise<ApplicationInstance> {
   const extraContext = buildDeviceContextSummary(appConfig, Array.from(enabledToolNames));
   const systemPrompt = buildSystemPrompt(extraContext, new Date(time.now()));
 
-  const voiceEnabled = Boolean(OPENAI_VOICE_MODEL && OPENAI_VOICE_NAME);
-  const speechRenderer = new SpeechRenderer(audioOut, realtimeTts, tts, {
-    voiceEnabled,
+  const speechRenderer = new SpeechRenderer(audioOut, realtimeTts, fallbackTts!, {
+    voiceEnabled: voiceEnabled ?? true,
+    allowRealtimeStreaming,
   });
 
   const conversationLoop = new ConversationLoop(bus, orchestrator, speechRenderer, {

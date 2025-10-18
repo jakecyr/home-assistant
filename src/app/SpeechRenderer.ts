@@ -7,11 +7,13 @@ import { OpenAIRealtimeTTS } from "../adapters/speech/OpenAIRealtimeTTS";
 export interface SpeechRendererOptions {
   sampleRate?: number;
   voiceEnabled?: boolean;
+  allowRealtimeStreaming?: boolean;
 }
 
 export class SpeechRenderer {
   private readonly sampleRate: number;
   private readonly voiceEnabled: boolean;
+  private readonly allowRealtimeStreaming: boolean;
   private realtimeStreamingAvailable = true;
 
   constructor(
@@ -22,6 +24,7 @@ export class SpeechRenderer {
   ) {
     this.sampleRate = options.sampleRate ?? 16000;
     this.voiceEnabled = options.voiceEnabled ?? true;
+    this.allowRealtimeStreaming = options.allowRealtimeStreaming ?? true;
   }
 
   async render(action: AssistantAction): Promise<void> {
@@ -39,6 +42,7 @@ export class SpeechRenderer {
         : true;
 
     if (
+      this.allowRealtimeStreaming &&
       this.realtimeStreamingAvailable &&
       typeof this.audioOut.playStream === "function" &&
       streamingSupported

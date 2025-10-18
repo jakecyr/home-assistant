@@ -78,6 +78,45 @@ node scripts/list-audio-devices.js
 
 Set `AUDIO_DEVICE` in `.env` to the desired device index or name.
 
+## 🗣️ Voices / Text-to-Speech
+
+- **Engine options:** `speech.engine` may be set to `"openai"` (default) or `"system"`.
+- **OpenAI voices (default):** When `OPENAI_VOICE_MODEL` and `OPENAI_VOICE_NAME` are set, the assistant streams speech via OpenAI and plays it with your system audio player.
+- **System voices:** Set your config to use the system engine (`speech.engine: "system"`). On macOS this uses `say`. On Linux/Raspberry Pi this uses one of: `pico2wave`, `espeak-ng`/`espeak`, `flite`, or `text2wave`.
+
+Example `config.json` to force OpenAI voices:
+
+```json
+{
+  "speech": {
+    "engine": "openai"
+  }
+}
+```
+
+### Linux / Raspberry Pi TTS engines
+
+Install at least one engine. The assistant will detect and use the first available engine in this order: `pico2wave`, `espeak-ng`, `espeak`, `flite`, `text2wave`.
+
+```bash
+sudo apt update
+# Recommended (small, fast):
+sudo apt install -y libttspico-utils
+
+# Alternatives:
+sudo apt install -y espeak-ng   # or: sudo apt install -y espeak
+sudo apt install -y flite
+sudo apt install -y festival festvox-us-slt-hts  # provides text2wave
+```
+
+If no TTS engine is found on Linux, the app will show a clear runtime error with install instructions.
+
+Optional: for streaming playback support (improves OpenAI real-time voices), install a streaming-capable player:
+
+```bash
+sudo apt install -y ffmpeg alsa-utils
+```
+
 ## ⚙️ Configuration
 
 ### Environment Variables
@@ -143,6 +182,12 @@ sudo apt update
 sudo apt install -y git build-essential python3 make g++ alsa-utils
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt install -y nodejs
+
+# Optional: text-to-speech engines (choose one or more)
+sudo apt install -y libttspico-utils espeak-ng flite
+
+# Optional: players for audio playback and streaming
+sudo apt install -y ffmpeg alsa-utils
 
 # Follow the Quick Start instructions above
 ```

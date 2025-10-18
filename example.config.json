@@ -1,11 +1,19 @@
 {
-  "tools": ["tplink_toggle", "timer_beep", "weather_current", "time_now"],
+  "tools": [
+    "tplink_toggle",
+    "timer_beep",
+    "weather_current",
+    "time_now"
+  ],
   "tplink": {
     "devices": {
       "tall_lamp": {
         "ip": "192.168.0.163",
         "room": "living room",
-        "aliases": ["floor lamp", "tall lamp"]
+        "aliases": [
+          "floor lamp",
+          "tall lamp"
+        ]
       }
     }
   },
@@ -14,5 +22,9 @@
     "longitude": -77.3242,
     "timezone": "America/New_York",
     "units": "F"
+  },
+  "speech": {
+    "engine": "openai",
+    "voice": "onyx"
   }
 }

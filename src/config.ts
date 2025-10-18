@@ -17,11 +17,17 @@ export interface WeatherConfig {
   timezone?: string;
 }
 
+export interface SpeechConfig {
+  engine?: "openai" | "system";
+  voice?: string;
+}
+
 export interface AppConfig {
   tplink?: {
     devices: DeviceMap;
   };
   weather?: WeatherConfig;
+  speech?: SpeechConfig;
   tools?: string[];
 }
 
@@ -67,6 +73,13 @@ export function loadConfig(configPath?: string): LoadedConfig {
           delete (weather as any).units;
         }
         normalized.weather = weather;
+      }
+
+      if (parsed.speech && typeof parsed.speech === "object") {
+        const speech = normalizeSpeechConfig(parsed.speech as Record<string, unknown>);
+        if (speech) {
+          normalized.speech = speech;
+        }
       }
 
       return { config: normalized, path: resolved };
@@ -192,5 +205,33 @@ function normalizeWeatherUnits(
   if (["imperial", "f", "fahrenheit"].includes(lowered)) {
     return "imperial";
   }
+  return undefined;
+}
+
+function normalizeSpeechConfig(input: Record<string, unknown>): SpeechConfig | null {
+  const engineRaw = typeof input.engine === "string" ? input.engine.trim() : "";
+  const engine = normalizeSpeechEngine(engineRaw);
+  if (engineRaw && !engine) {
+    console.warn(
+      `Unrecognized speech.engine value "${engineRaw}". Expected "openai" or "system".`,
+    );
+  }
+
+  const voice =
+    typeof input.voice === "string" && input.voice.trim().length > 0
+      ? input.voice.trim()
+      : undefined;
+
+  const result: SpeechConfig = {};
+  if (engine) result.engine = engine;
+  if (voice) result.voice = voice;
+
+  return Object.keys(result).length > 0 ? result : null;
+}
+
+function normalizeSpeechEngine(value: string): SpeechConfig["engine"] | undefined {
+  const lowered = value.toLowerCase();
+  if (lowered === "openai" || lowered === "openai_tts") return "openai";
+  if (lowered === "system" || lowered === "local" || lowered === "machine") return "system";
   return undefined;
 }
