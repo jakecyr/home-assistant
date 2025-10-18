@@ -104,6 +104,7 @@ export async function buildApplication(): Promise<ApplicationInstance> {
   );
   enabledToolNames.add('timer_set');
   enabledToolNames.add('weather_current');
+  enabledToolNames.add('time_now');
 
   const toolLog = (...args: any[]) => console.log('[tool]', ...args);
   const functionTools: FunctionTool[] = [];
@@ -145,7 +146,7 @@ export async function buildApplication(): Promise<ApplicationInstance> {
   const orchestrator = new ToolOrchestrator(llm, tools);
 
   const extraContext = buildDeviceContextSummary(appConfig, Array.from(enabledToolNames));
-  const systemPrompt = buildSystemPrompt(extraContext);
+  const systemPrompt = buildSystemPrompt(extraContext, new Date(time.now()));
 
   const voiceEnabled = Boolean(OPENAI_VOICE_MODEL && OPENAI_VOICE_NAME);
   const speechRenderer = new SpeechRenderer(audioOut, realtimeTts, tts, {
@@ -193,17 +194,35 @@ export async function buildApplication(): Promise<ApplicationInstance> {
   };
 }
 
-function buildSystemPrompt(extraContext: string | null): string {
-const base = `You are Jarvis, a voice agent on a Raspberry Pi.
+function buildSystemPrompt(extraContext: string | null, now: Date): string {
+  const formattedNow = formatCurrentDateTime(now);
+  const base = `You are Jarvis, a voice agent on a Raspberry Pi.
 Only respond when the user is clearly addressing you. Treat any clear question or command (for example, "What's the weather like today?" or "Set a five minute timer") as direct engagement that requires a full response. If the transcript sounds like background chatter, off-topic speech, or another conversation, politely ignore it with a very brief acknowledgement like "No problem, I'll stay quiet." and wait for more input.
 When the user asks to control lights, plugs, or other smart devices you MUST invoke the appropriate tool. Never claim success without calling a tool. If you cannot match the requested device to one of the known names or aliases, ask for clarification.
 When you successfully complete a home-control request, confirm the action in your reply (for example, "Okay, the tall lamp is on"). Do not use the quiet acknowledgement after completing a requested action.
 When the user asks to set a timer, call the timer tool with the provided duration components (hours/minutes/seconds). Confirm the timer length and when it will end.
 Always respond as JSON conforming to the AssistantAction schema with fields: reply_text (string), optional speak_ssml (string), optional tool_calls (array of {name, arguments}), expect_user_response (boolean), optional metadata.
 When tools are available, decide if any are needed. If you call tools, wait for their results before replying to the user.
-Be concise. If no tools are needed, reply directly to the user.`;
+Be concise. If no tools are needed, reply directly to the user.
+
+Current local date/time: ${formattedNow}.`;
   if (extraContext) {
     return `${base}\n\n${extraContext}`;
   }
   return base;
+}
+
+function formatCurrentDateTime(now: Date): string {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+    timeZoneName: 'short',
+  });
+  return formatter.format(now);
 }
