@@ -53,6 +53,19 @@ npm start
 - `npm run build` - Rebuild after making changes
 - `./scripts/run.sh` - Run with auto-restart on crashes
 
+#### CLI Options
+CLI flags work with `npm start`, `node lib/index.js`, and helper scripts like `./scripts/run.sh`. Pass them after a `--` when using npm. For example, to load a specific config file:
+
+```bash
+npm start -- --config ./configs/living-room.json
+```
+
+Available flags:
+- `--config <path>` - Load configuration from a custom file instead of the defaults (`config.json`, `assistant.config.json`)
+- `--log-file <path>` - Mirror console output to the given log file (created if missing)
+- `--debug-tools` / `--no-debug-tools` - Toggle extra debugging output for speech streaming
+- `--auto-listen` / `--no-auto-listen` - Start with the microphone already listening (skips wake word) or force wake-word activation
+
 #### Configuration
 Customize the assistant by creating a `config.json` file. See the example below for available options.
 
