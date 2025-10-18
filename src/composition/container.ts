@@ -103,6 +103,7 @@ export async function buildApplication(): Promise<ApplicationInstance> {
     configuredToolNames.length ? configuredToolNames : defaultToolNames,
   );
   enabledToolNames.add('timer_set');
+  enabledToolNames.add('weather_current');
 
   const toolLog = (...args: any[]) => console.log('[tool]', ...args);
   const functionTools: FunctionTool[] = [];
@@ -194,7 +195,7 @@ export async function buildApplication(): Promise<ApplicationInstance> {
 
 function buildSystemPrompt(extraContext: string | null): string {
 const base = `You are Jarvis, a voice agent on a Raspberry Pi.
-Only respond when the user is clearly addressing you. If the transcript sounds like background chatter, off-topic speech, or another conversation, politely ignore it with a very brief acknowledgement like "No problem, I'll stay quiet." and wait for more input.
+Only respond when the user is clearly addressing you. Treat any clear question or command (for example, "What's the weather like today?" or "Set a five minute timer") as direct engagement that requires a full response. If the transcript sounds like background chatter, off-topic speech, or another conversation, politely ignore it with a very brief acknowledgement like "No problem, I'll stay quiet." and wait for more input.
 When the user asks to control lights, plugs, or other smart devices you MUST invoke the appropriate tool. Never claim success without calling a tool. If you cannot match the requested device to one of the known names or aliases, ask for clarification.
 When you successfully complete a home-control request, confirm the action in your reply (for example, "Okay, the tall lamp is on"). Do not use the quiet acknowledgement after completing a requested action.
 When the user asks to set a timer, call the timer tool with the provided duration components (hours/minutes/seconds). Confirm the timer length and when it will end.

@@ -36,17 +36,49 @@ export class ToolOrchestrator {
 
     const resolveToolName = (raw: string): string | null => {
       if (!raw || typeof raw !== "string") return null;
+
       const candidates = new Set<string>();
+      const addCandidates = (value: string | null | undefined) => {
+        if (!value) return;
+        const base = value.trim();
+        if (!base) return;
+        const withUnderscores = base.replace(/[ .]/g, "_");
+        const sanitized = base.replace(/[^a-zA-Z0-9_-]/g, "_");
+        const variants = [
+          base,
+          base.toLowerCase(),
+          withUnderscores,
+          withUnderscores.toLowerCase(),
+          sanitized,
+          sanitized.toLowerCase(),
+        ];
+        for (const variant of variants) {
+          if (variant.length > 0) {
+            candidates.add(variant);
+          }
+        }
+      };
+
       const trimmed = raw.trim();
-      candidates.add(trimmed);
-      candidates.add(trimmed.toLowerCase());
-      candidates.add(trimmed.replace(/[ .]/g, "_"));
-      candidates.add(trimmed.replace(/[ .]/g, "_").toLowerCase());
-      candidates.add(trimmed.replace(/[^a-zA-Z0-9_-]/g, "_"));
-      candidates.add(trimmed.replace(/[^a-zA-Z0-9_-]/g, "_").toLowerCase());
-      for (const c of candidates) {
-        if (validToolNames.has(c)) return c;
+      addCandidates(trimmed);
+
+      const prefixStripped = trimmed.replace(
+        /^(?:function|functions|tool|tools)[\s.:_-]*/i,
+        ""
+      );
+      if (prefixStripped !== trimmed) {
+        addCandidates(prefixStripped);
       }
+
+      const segments = trimmed.split(/[:.]/).filter((segment) => segment.length > 0);
+      if (segments.length > 1) {
+        addCandidates(segments[segments.length - 1]);
+      }
+
+      for (const candidate of candidates) {
+        if (validToolNames.has(candidate)) return candidate;
+      }
+
       return null;
     };
 

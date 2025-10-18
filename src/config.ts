@@ -51,6 +51,24 @@ export function loadConfig(configPath?: string): LoadedConfig {
         };
       }
 
+      if (parsed.weather && typeof parsed.weather === "object") {
+        const weather = { ...(parsed.weather as WeatherConfig) };
+        const normalizedUnits = normalizeWeatherUnits((parsed.weather as any).units);
+        if (normalizedUnits) {
+          weather.units = normalizedUnits;
+        } else if (
+          typeof (parsed.weather as any).units === "string" &&
+          (parsed.weather as any).units.trim().length > 0
+        ) {
+          console.warn(
+            `Unrecognized weather.units value "${(parsed.weather as any).units}". ` +
+              'Expected "metric", "imperial", "C", or "F".',
+          );
+          delete (weather as any).units;
+        }
+        normalized.weather = weather;
+      }
+
       return { config: normalized, path: resolved };
     } catch (err) {
       console.warn(`Failed to load config from ${candidate}:`, err);
@@ -158,4 +176,21 @@ function buildLookupKeys(name: string, entry: DeviceEntry): Set<string> {
   }
 
   return keys;
+}
+
+function normalizeWeatherUnits(
+  value: unknown
+): WeatherConfig["units"] | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+
+  const lowered = trimmed.toLowerCase();
+  if (["metric", "c", "celsius"].includes(lowered)) {
+    return "metric";
+  }
+  if (["imperial", "f", "fahrenheit"].includes(lowered)) {
+    return "imperial";
+  }
+  return undefined;
 }

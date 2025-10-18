@@ -1,9 +1,6 @@
-import type { ToolExecutionResult } from "../ports/tools/ToolRegistryPort";
-import type { AppConfig } from "../config";
-
 type Units = "metric" | "imperial";
 
-export interface WeatherArgs {
+interface WeatherArgs {
   latitude?: number;
   longitude?: number;
   location?: string;
@@ -20,6 +17,25 @@ interface GeocodeResult extends Coordinates {
   timezone?: string;
 }
 
+interface WeatherConfig {
+  latitude?: number;
+  longitude?: number;
+  units?: Units;
+  timezone?: string;
+}
+
+interface ToolContext {
+  config: {
+    weather?: WeatherConfig;
+  };
+}
+
+interface ToolOutcome {
+  ok: boolean;
+  message: string;
+  data?: Record<string, unknown>;
+}
+
 function resolveNumericCoordinates(
   args: WeatherArgs,
   configLat?: number,
@@ -29,7 +45,6 @@ function resolveNumericCoordinates(
   const hasArgLon = typeof args.longitude === "number";
 
   if (!hasArgLat && !hasArgLon) return null;
-
   if (hasArgLat && hasArgLon) {
     return { latitude: args.latitude!, longitude: args.longitude! };
   }
@@ -95,12 +110,11 @@ async function geocodeLocation(query: string): Promise<GeocodeResult | null> {
   };
 }
 
-export class WeatherTool {
-  readonly name = "weather_current";
-  readonly description =
-    "Get current weather conditions using Open-Meteo. Provide coordinates or configure defaults in config.weather.";
-
-  readonly schema = {
+const weatherTool = {
+  name: "weather_current",
+  description:
+    "Get current weather conditions using Open-Meteo. Provide coordinates or configure defaults in config.weather.",
+  parameters: {
     type: "object",
     properties: {
       latitude: {
@@ -125,24 +139,23 @@ export class WeatherTool {
     },
     required: [],
     additionalProperties: false,
-  };
+  },
 
-  constructor(private readonly config: AppConfig) {}
+  async execute(args: WeatherArgs = {}, ctx: ToolContext): Promise<ToolOutcome> {
+    const weather = ctx.config.weather;
+    const configLat = weather?.latitude;
+    const configLon = weather?.longitude;
 
-  async exec(args: WeatherArgs): Promise<ToolExecutionResult> {
-    const configLat = this.config.weather?.latitude;
-    const configLon = this.config.weather?.longitude;
-
-    const hasAnyNumeric =
+    const hasNumericInput =
       typeof args.latitude === "number" || typeof args.longitude === "number";
     const locationQuery =
       typeof args.location === "string" ? args.location.trim() : "";
 
     let coords: Coordinates | null = null;
     let locationLabel: string | undefined;
-    let timezone = this.config.weather?.timezone;
+    let timezone = weather?.timezone;
 
-    if (hasAnyNumeric) {
+    if (hasNumericInput) {
       coords = resolveNumericCoordinates(args, configLat, configLon);
       if (!coords) {
         return {
@@ -186,7 +199,7 @@ export class WeatherTool {
       };
     }
 
-    const units: Units = args.units || this.config.weather?.units || "metric";
+    const units: Units = args.units || weather?.units || "metric";
     const temperatureUnit = units === "imperial" ? "fahrenheit" : "celsius";
     const windSpeedUnit = units === "imperial" ? "mph" : "kmh";
 
@@ -229,6 +242,7 @@ export class WeatherTool {
       ? `Current weather for ${locationLabel}: `
       : "Current weather: ";
     const message = `${prefix}temperature is ${temperature}${unitSymbol}, humidity ${humidity}% and wind ${windSpeed} ${windUnit}.`;
+
     return {
       ok: true,
       message,
@@ -242,5 +256,7 @@ export class WeatherTool {
         location: locationLabel,
       },
     };
-  }
-}
+  },
+};
+
+export default weatherTool;

@@ -1,5 +1,5 @@
 {
-  "tools": ["tplink_toggle", "timer_beep"],
+  "tools": ["tplink_toggle", "timer_beep", "weather_current"],
   "tplink": {
     "devices": {
       "tall_lamp": {
@@ -12,6 +12,7 @@
   "weather": {
     "latitude": 38.8458,
     "longitude": -77.3242,
-    "timezone": "America/New_York"
+    "timezone": "America/New_York",
+    "units": "F"
   }
 }
